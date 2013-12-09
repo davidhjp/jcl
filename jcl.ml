@@ -21,11 +21,11 @@ with sexp
 
 let print_ds myds =
   let () = Hashtbl.iter (fun k v -> 
-    print_endline k;
-    output_hum stdout (sexp_of_class_data v); print_endline ""
+      print_endline k;
+      output_hum stdout (sexp_of_class_data v); print_endline ""
     ) myds in
   ()
-  
+
 
 let rec get_ds fn cp myds =
   let classpath = class_path cp in
@@ -62,7 +62,7 @@ let rec get_ds fn cp myds =
       ) classorinter in
     ()
   | Some x -> print_endline ("INFO: class "^(cn_name (get_name classorinter))^" already parsed")
-                
+
 let () =
   let usage_msg = "Usage: jcl [OPTION] <full_class_name>" in
   let cp = ref "." in
@@ -75,7 +75,7 @@ let () =
       exit 1 in
   let myds = Hashtbl.create 300 in
   try
-(*     print_endline !cp; *)
+    (*     print_endline !cp; *)
     let () = get_ds !cname !cp myds in
     let () = print_ds myds in
     ()
