@@ -3,4 +3,5 @@ jcl
 
 Classfile traversal for WCMC analysis
 
-`Usage`
+`Usage: jcl -cp <classpath> <full_class_name>`
+
