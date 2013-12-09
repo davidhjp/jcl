@@ -21,7 +21,7 @@ with sexp
 
 let print_ds myds =
   let () = Hashtbl.iter (fun k v -> 
-    print_endline (cn_name (get_name k));
+    print_endline k;
     output_hum stdout (sexp_of_class_data v); print_endline ""
     ) myds in
   ()
@@ -31,12 +31,13 @@ let rec get_ds fn cp myds =
   let classpath = class_path cp in
   let classname = make_cn fn in
   let classorinter = get_class classpath classname in
-  let cd = Hashtbl.find_option myds classorinter in
+  let classorinter_string = (cn_name (get_name classorinter)) in
+  let cd = Hashtbl.find_option myds classorinter_string in
   match cd with
   | None -> 
     let size_table = 
       {_int=0;_bool=0;_byte=0;_char=0;_double=0;_float=0;_long=0;_short=0;_ref=0;_arrayref=0} in
-    let () = Hashtbl.add myds classorinter size_table in
+    let () = Hashtbl.add myds classorinter_string size_table in
     let () = cf_iter (fun x -> 
         match fs_type (x.cf_signature) with
         | TBasic x ->
@@ -60,7 +61,7 @@ let rec get_ds fn cp myds =
           )
       ) classorinter in
     ()
-  | Some x -> print_endline ("class "^(cn_name (get_name classorinter))^"already parsed")
+  | Some x -> print_endline ("INFO: class "^(cn_name (get_name classorinter))^" already parsed")
                 
 let () =
   let usage_msg = "Usage: jcl [OPTION] <full_class_name>" in
@@ -74,7 +75,7 @@ let () =
       exit 1 in
   let myds = Hashtbl.create 300 in
   try
-    print_endline !cp;
+(*     print_endline !cp; *)
     let () = get_ds !cname !cp myds in
     let () = print_ds myds in
     ()
