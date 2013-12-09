@@ -27,10 +27,7 @@ let print_ds myds =
   ()
 
 
-let rec get_ds fn cp myds =
-  let classpath = class_path cp in
-  let classname = make_cn fn in
-  let classorinter = get_class classpath classname in
+let rec get_ds classorinter myds =
   let classorinter_string = (cn_name (get_name classorinter)) in
   let cd = Hashtbl.find_option myds classorinter_string in
   match cd with
@@ -54,7 +51,6 @@ let rec get_ds fn cp myds =
         | TObject x ->
           (match x with
            | TClass x ->
-             let () = get_ds (cn_name x) cp myds in
              size_table._ref <- succ size_table._ref
            | TArray x ->
              size_table._arrayref <- succ size_table._arrayref
@@ -64,20 +60,15 @@ let rec get_ds fn cp myds =
   | Some x -> print_endline ("INFO: class "^(cn_name (get_name classorinter))^" already parsed")
 
 let () =
-  let usage_msg = "Usage: jcl [OPTION] <full_class_name>" in
-  let cp = ref "." in
+  let usage_msg = 
+    "Usage: jcl <filename>"
+  in
   let cname = ref "" in
-  let speclist = Arg.align [
-      ("-cp", Arg.Set_string cp, "<file> Setting Java classpath") ] in
-  let () = Arg.parse speclist (fun x -> cname := x) usage_msg in
+  let () = Arg.parse [] (fun x -> cname := x) usage_msg in
   let () = if !cname = "" then
-      let () = Arg.usage speclist usage_msg in
+      let () = Arg.usage [] usage_msg in
       exit 1 in
   let myds = Hashtbl.create 300 in
-  try
-    (*     print_endline !cp; *)
-    let () = get_ds !cname !cp myds in
-    let () = print_ds myds in
+  let () = iter ~debug:false (fun x -> get_ds x myds) !cname in 
+  let () = print_ds myds in
     ()
-  with
-  | JBasics.No_class_found x -> print_endline ("No class found : "^x)
