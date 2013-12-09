@@ -5,6 +5,8 @@ open Javalib_pack
 open Javalib
 open JBasics
 module Hashtbl = Batteries.Hashtbl
+module String = Batteries.String
+module List = Batteries.List
 
 type class_data = {
   mutable _int : int;
@@ -63,12 +65,13 @@ let () =
   let usage_msg = 
     "Usage: jcl <filename>"
   in
-  let cname = ref "" in
-  let () = Arg.parse [] (fun x -> cname := x) usage_msg in
-  let () = if !cname = "" then
+  let flist = ref [] in
+  let () = Arg.parse [] (fun x -> flist := x :: !flist ) usage_msg in
+  let () = if List.is_empty !flist then
       let () = Arg.usage [] usage_msg in
       exit 1 in
   let myds = Hashtbl.create 300 in
-  let () = iter ~debug:false (fun x -> get_ds x myds) !cname in 
+  let () = List.iter (fun fn -> 
+      iter ~debug:false (fun x -> get_ds x myds) fn) !flist in 
   let () = print_ds myds in
-    ()
+  ()
