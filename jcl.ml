@@ -38,8 +38,8 @@ let rec get_ds fn cp myds =
     let size_table = 
       {_int=0;_bool=0;_byte=0;_char=0;_double=0;_float=0;_long=0;_short=0;_ref=0;_arrayref=0} in
     let () = Hashtbl.add myds classorinter_string size_table in
-    let () = cf_iter (fun x -> 
-        match fs_type (x.cf_signature) with
+    let () = f_iter (fun x -> 
+        match fs_type (get_field_signature x) with
         | TBasic x ->
           (match x with
            | `Int -> size_table._int <- succ size_table._int
