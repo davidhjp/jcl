@@ -19,7 +19,8 @@ type class_data = {
   mutable _long : int;
   mutable _short : int;
   mutable _ref : int;
-  mutable _arrayref : int} 
+  mutable _arrayref : int;
+} 
 with sexp
 
 type json_type = {
@@ -37,9 +38,11 @@ type json_type = {
   mutable boolean_size : int;
   mutable char_size : int;
   mutable ref_size : int;
-  mutable arrayref_size : int
+  others : (string, int) Std.Hashtbl.t
 }
 with sexp
+
+let used_arrays = Hashtbl.create 10
 
 let print_ds myds =
   let () = Hashtbl.iter (fun k v -> 
@@ -48,6 +51,23 @@ let print_ds myds =
     ) myds in
   ()
 
+let rec get_value = function
+  | TBasic x ->
+    (match x with
+     | `Int -> "I"
+     | `Bool -> "Z"
+     | `Byte -> "B"
+     | `Char -> "C"
+     | `Double -> "D"
+     | `Float -> "F"
+     | `Long -> "J"
+     | `Short -> "S"
+    )
+  | TObject x ->
+    get_array_string x
+and get_array_string = function
+  | TArray x -> "["^(get_value x)
+  | TClass x -> "L"^(cn_name x)
 
 let rec get_ds classorinter myds jvm =
   let classorinter_string = (cn_name (get_name classorinter)) in
@@ -55,7 +75,7 @@ let rec get_ds classorinter myds jvm =
   match cd with
   | None -> 
     let size_table = 
-      {_int=0;_bool=0;_byte=0;_char=0;_double=0;_float=0;_long=0;_short=0;_ref=0;_arrayref=0} in
+      {_int=0;_bool=0;_byte=0;_char=0;_double=0;_float=0;_long=0;_short=0;_ref=0;_arrayref=0;} in
     let () = Hashtbl.add myds classorinter_string size_table in
     let () = f_iter (fun x -> 
         match fs_type (get_field_signature x) with
@@ -74,8 +94,16 @@ let rec get_ds classorinter myds jvm =
           (match x with
            | TClass x ->
              size_table._ref <- size_table._ref + jvm.ref_size
-           | TArray x ->
-             size_table._arrayref <- size_table._arrayref + jvm.arrayref_size
+           | (TArray x) as arr ->
+             let array_string = get_array_string arr in
+             try
+               let num = Hashtbl.find jvm.others array_string in
+               Hashtbl.add used_arrays array_string num
+             with | Not_found -> 
+               let () = prerr_endline ("WARNING: Missing type '"^array_string^"' in the jvm file - "^
+                                       "automatically setting its size to 1") in
+               Hashtbl.add used_arrays array_string 1
+             (*              size_table._arrayref <- size_table._arrayref + jvm.arrayref_size *)
           )
       ) classorinter in
     ()
@@ -110,8 +138,12 @@ let parse_jvm jvm_spc jvm =
                | "boolean_size" -> jvm.boolean_size <- int_of_string b
                | "char_size" -> jvm.char_size <- int_of_string b
                | "ref_size" -> jvm.ref_size <- int_of_string b
-               | "arrayref_size" -> jvm.arrayref_size <- int_of_string b
-               | _ -> failwith (jvm_spc^": invalid format - "^line)
+               (*                | "arrayref_size" -> jvm.arrayref_size <- int_of_string b *)
+               | _ -> 
+                 (match Hashtbl.find_option jvm.others a  with
+                  | None -> Hashtbl.add jvm.others a (int_of_string b)
+                  | Some num -> failwith ("Duplicated entries : "^a)
+                 )
               )
             | _ -> failwith (jvm_spc^": invalid format - "^line)
           in
@@ -159,6 +191,18 @@ let make_json jvm myds =
                 Buffer.add_string buf ",\n";
               let () = Buffer.add_string buf name in
               let () = Buffer.add_string buf ": " in
+              let () = Buffer.add_string buf (string_of_int size) in
+              buf
+           ) used_arrays (Buffer.create 500)) in
+    let () = add "," in 
+    let () = newline () in
+    let () = Buffer.add_buffer b 
+        (Hashtbl.fold 
+           (fun name size buf -> 
+              if Buffer.length buf <> 0 then
+                Buffer.add_string buf ",\n";
+              let () = Buffer.add_string buf name in
+              let () = Buffer.add_string buf ": " in
               let () = Buffer.add_string buf (string_of_int (acc_data size)) in
               buf
            ) myds (Buffer.create 500)) in
@@ -188,7 +232,7 @@ let () =
   let jvm = {refsize=4;ousize=4;joohsize=4;foh=4;
              byte_size=1;short_size=2;int_size=4;long_size=8;float_size=4;
              double_size=8;boolean_size=1;char_size=2;
-             ref_size=4; arrayref_size=4
+             ref_size=4; others=(Hashtbl.create 10)
             } in
   let () = 
     if !jvm_spec <> "" then
@@ -199,7 +243,7 @@ let () =
   let myds = Hashtbl.create 300 in
   let () = List.iter (fun fn -> 
       iter ~debug:false (fun x -> get_ds x myds jvm) fn) !flist in 
-(*   let () = print_ds myds in *)
+  (*   let () = print_ds myds in *)
 
   let () = make_json jvm myds in
   ()
