@@ -42,14 +42,15 @@ type json_type = {
 }
 with sexp
 
-let used_arrays = Hashtbl.create 10
-
 let print_ds myds =
+  let ofile = "data.out" in
+  let oc = open_out ofile in
   let () = Hashtbl.iter (fun k v -> 
-      print_endline k;
-      output_hum stdout (sexp_of_class_data v); print_endline ""
+      Printf.fprintf oc "%s\n(_int:%d _bool:%d _byte:%d _char:%d _double:%d _float:%d\n_long:%d _short:%d _ref:%d _arrayref:%d)\n" 
+          k v._int v._bool v._byte v._char v._double v._float v._long v._short v._ref v._arrayref
     ) myds in
-  ()
+  let () = flush stdout in
+  close_out oc
 
 let rec get_value = function
   | TBasic x ->
@@ -69,7 +70,7 @@ and get_array_string = function
   | TArray x -> "["^(get_value x)
   | TClass x -> "L"^(cn_name x)
 
-let rec get_ds classorinter myds jvm =
+let rec get_ds classorinter myds jvm used_arrays =
   let classorinter_string = (cn_name (get_name classorinter)) in
   let cd = Hashtbl.find_option myds classorinter_string in
   match cd with
@@ -96,17 +97,17 @@ let rec get_ds classorinter myds jvm =
              size_table._ref <- size_table._ref + jvm.ref_size
            | (TArray x) as arr ->
              let array_string = get_array_string arr in
-             try
-               let num = Hashtbl.find jvm.others array_string in
-               Hashtbl.add used_arrays array_string num
-             with | Not_found -> 
-               match Hashtbl.find_option used_arrays array_string with
-               | None ->
-                 let () = prerr_endline ("WARNING: Missing type '"^array_string^"' in the jvm file - "^
-                                         "automatically setting its size to 1") in
-                 Hashtbl.add used_arrays array_string 1
-               | _ -> ()
-             (*              size_table._arrayref <- size_table._arrayref + jvm.arrayref_size *)
+             let num = (match Hashtbl.find_option jvm.others array_string with
+                 | Some x -> x
+                 | None ->
+                   let () = 
+                     if (function | None -> true | _ -> false ) (Hashtbl.find_option used_arrays array_string) then
+                       let () = prerr_endline ("WARNING: Missing type '"^array_string^"' in the jvm file - "^
+                                               "automatically setting its size to 1") in
+                       Hashtbl.add used_arrays array_string 1 in
+                   1
+               ) in 
+             size_table._arrayref <- size_table._arrayref + num
           )
       ) classorinter in
     ()
@@ -157,7 +158,7 @@ let parse_jvm jvm_spc jvm =
   in
   ()
 
-let make_json jvm myds =
+let make_json jvm myds used_arrays =
   let ofile = "data.json" in
   let oc = open_out ofile in
   let b = Buffer.create 100 in
@@ -241,9 +242,9 @@ let () =
   in
 
   let myds = Hashtbl.create 300 in
+  let used_arrays = Hashtbl.create 10 in 
   let () = List.iter (fun fn -> 
-      iter ~debug:false (fun x -> get_ds x myds jvm) fn) !flist in 
-  (*   let () = print_ds myds in *)
-
-  let () = make_json jvm myds in
+      iter ~debug:false (fun x -> get_ds x myds jvm used_arrays) fn) !flist in 
+  let () = print_ds myds in
+  let () = make_json jvm myds used_arrays in
   ()
