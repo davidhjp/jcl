@@ -8,6 +8,6 @@ all:
 		-package sexplib jcl.ml
 	javac mypackage/*.java
 clean:
-	-rm mypackage/*.class
-	-rm -r _build *.cmi *.cmx *.o *.cmo *.annot *.exe *.class
+	@rm -f mypackage/*.class mypackage/*.jar
+	@rm -rf _build *.cmi *.cmx *.o *.cmo *.annot *.exe *.class *.json *.out
 
