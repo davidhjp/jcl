@@ -190,15 +190,12 @@ let make_json jvm myds =
     let () = Buffer.add_buffer b 
         (Hashtbl.fold 
            (fun name size buf -> 
-              if Buffer.length buf <> 0 then
-                Buffer.add_string buf ",\n";
               let () = Buffer.add_string buf name in
               let () = Buffer.add_string buf ": " in
               let () = Buffer.add_string buf (string_of_int size) in
+              let () = Buffer.add_string buf ",\n" in
               buf
            ) used_arrays (Buffer.create 500)) in
-    let () = add "," in 
-    let () = newline () in
     let () = Buffer.add_buffer b 
         (Hashtbl.fold 
            (fun name size buf -> 
