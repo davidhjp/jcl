@@ -100,9 +100,12 @@ let rec get_ds classorinter myds jvm =
                let num = Hashtbl.find jvm.others array_string in
                Hashtbl.add used_arrays array_string num
              with | Not_found -> 
-               let () = prerr_endline ("WARNING: Missing type '"^array_string^"' in the jvm file - "^
-                                       "automatically setting its size to 1") in
-               Hashtbl.add used_arrays array_string 1
+               match Hashtbl.find_option used_arrays array_string with
+               | None ->
+                 let () = prerr_endline ("WARNING: Missing type '"^array_string^"' in the jvm file - "^
+                                         "automatically setting its size to 1") in
+                 Hashtbl.add used_arrays array_string 1
+               | _ -> ()
              (*              size_table._arrayref <- size_table._arrayref + jvm.arrayref_size *)
           )
       ) classorinter in
