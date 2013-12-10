@@ -128,6 +128,10 @@ let make_json jvm myds =
   let b = Buffer.create 100 in
   let add str = Buffer.add_string b str in
   let newline () = Buffer.add_string b "\n" in
+  let acc_data cdata = 
+    cdata._int + cdata._bool + cdata._byte + cdata._char + cdata._double +
+    cdata._float + cdata._long + cdata._short + cdata._ref + cdata._arrayref
+  in
   let () = add "{\n" in
   let () = 
     let () = add "PrimordialTypeSizes : [{}]\n" in
@@ -142,6 +146,19 @@ let make_json jvm myds =
     let () = newline () in
     let () = add "FrameOverhead : " in
     let () = add (string_of_int jvm.foh) in
+    let () = newline () in
+    let () = add "ApplicationTypeSizes : [{\n" in
+    let () = Buffer.add_buffer b 
+        (Hashtbl.fold 
+           (fun name size buf -> 
+              if Buffer.length buf <> 0 then
+                Buffer.add_string buf ",\n";
+              let () = Buffer.add_string buf name in
+              let () = Buffer.add_string buf ": " in
+              let () = Buffer.add_string buf (string_of_int (acc_data size)) in
+              buf
+           ) myds (Buffer.create 500)) in
+    let () = add "}]\n" in
     newline ()
   in
   let () = add "}\n" in
@@ -178,7 +195,7 @@ let () =
   let myds = Hashtbl.create 300 in
   let () = List.iter (fun fn -> 
       iter ~debug:false (fun x -> get_ds x myds jvm) fn) !flist in 
-  let () = print_ds myds in
+(*   let () = print_ds myds in *)
 
   let () = make_json jvm myds in
   ()
