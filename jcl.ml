@@ -70,15 +70,40 @@ and get_array_string = function
   | TArray x -> "["^(get_value x)
   | TClass x -> "L"^(cn_name x)
 
-let rec get_ds classorinter myds jvm used_arrays =
-  let classorinter_string = (cn_name (get_name classorinter)) in
-  let cd = Hashtbl.find_option myds classorinter_string in
+let rec get_all_fields cp l = function
+  | JClass x -> 
+    let l = ref l in
+    (match x.c_super_class with
+     | Some clazz -> 
+       (try
+          let super_class = get_class cp clazz in
+          let () = f_iter (fun x -> l := x :: !l ) super_class in
+(*           let () = print_endline ("super : "^(cn_name (get_name super_class))) in *)
+          get_all_fields cp !l super_class
+        with
+        | No_class_found x -> raise (No_class_found ("Unable to find "^x^" in classpath check -cp option?")))
+     | None -> !l
+    )
+  | _ -> failwith ("This must be alwasy JClass")
+
+let rec get_ds clazz myds jvm used_arrays cp =
+  let clazz_string = (cn_name (get_name clazz)) in
+  let cd = Hashtbl.find_option myds clazz_string in
   match cd with
   | None -> 
     let size_table = 
       {_int=0;_bool=0;_byte=0;_char=0;_double=0;_float=0;_long=0;_short=0;_ref=0;_arrayref=0;} in
-    let () = Hashtbl.add myds classorinter_string size_table in
-    let () = f_iter (fun x -> 
+    let () = Hashtbl.add myds clazz_string size_table in
+(*     print_endline ("**** getting super of "^clazz_string); *)
+    let all_fields = get_all_fields cp [] clazz in
+    let all_fields = f_fold (fun x all -> x :: all ) clazz all_fields in
+(*
+    print_endline ("all fields : ");
+    let () = List.iter (fun x -> 
+        print_endline (fs_name (get_field_signature x ))
+      ) all_fields in
+*)
+    let () = List.iter (fun x -> 
         match fs_type (get_field_signature x) with
         | TBasic x ->
           (match x with
@@ -94,9 +119,10 @@ let rec get_ds classorinter myds jvm used_arrays =
         | TObject x ->
           (match x with
            | TClass x ->
+             (* May be need to exclude static type? *)
              size_table._ref <- size_table._ref + jvm.ref_size
            | (TArray x) as arr ->
-             let array_string = get_array_string arr in
+             let array_string = ("\""^ get_array_string arr ^"\"")in
              let num = (match Hashtbl.find_option jvm.others array_string with
                  | Some x -> x
                  | None ->
@@ -109,9 +135,9 @@ let rec get_ds classorinter myds jvm used_arrays =
                ) in 
              size_table._arrayref <- size_table._arrayref + num
           )
-      ) classorinter in
+      ) all_fields in
     ()
-  | Some x -> print_endline ("INFO: class "^(cn_name (get_name classorinter))^" already parsed")
+  | Some x -> print_endline ("INFO: class "^(cn_name (get_name clazz))^" already parsed")
 
 let parse_jvm jvm_spc jvm =
   let ic = open_in jvm_spc in
@@ -220,9 +246,12 @@ let () =
     "Usage: jcl <filename>"
   in
   let jvm_spec = ref "" in
+  let cp = ref "" in
   let speclist = Arg.align [
       ("-jvm", Arg.Set_string jvm_spec, "<file> "^
                                         "     JVM configuration file");
+      ("-cp", Arg.Set_string cp, "<classpath> "^
+                                        "     Setting classpath");
     ] in
   let flist = ref [] in
   let () = Arg.parse speclist (fun x -> flist := x :: !flist ) usage_msg in
@@ -243,8 +272,12 @@ let () =
 
   let myds = Hashtbl.create 300 in
   let used_arrays = Hashtbl.create 10 in 
+  let clazz_path = class_path !cp in
   let () = List.iter (fun fn -> 
-      iter ~debug:false (fun x -> get_ds x myds jvm used_arrays) fn) !flist in 
+      iter ~debug:false (fun x -> (function | JClass _ -> get_ds x myds jvm used_arrays clazz_path
+                                            | JInterface _ -> ()) x
+        ) fn) !flist in 
+  let () = close_class_path clazz_path in
   let () = print_ds myds in
   let () = make_json jvm myds used_arrays in
   ()
