@@ -104,6 +104,7 @@ let rec get_ds clazz myds jvm used_arrays cp =
       ) all_fields in
 *)
     let () = List.iter (fun x -> 
+      if not(is_static_field x) then
         match fs_type (get_field_signature x) with
         | TBasic x ->
           (match x with
@@ -135,6 +136,7 @@ let rec get_ds clazz myds jvm used_arrays cp =
                ) in 
              size_table._arrayref <- size_table._arrayref + num
           )
+          (* Need to deal with static fields later *)
       ) all_fields in
     ()
   | Some x -> print_endline ("INFO: class "^(cn_name (get_name clazz))^" already parsed")
