@@ -38,6 +38,8 @@ type json_type = {
   mutable boolean_size : int;
   mutable char_size : int;
   mutable ref_size : int;
+  mutable header_size : int;
+  mutable align_size : int;
   others : (string, int) Std.Hashtbl.t
 }
 with sexp
@@ -170,6 +172,8 @@ let parse_jvm jvm_spc jvm =
                | "boolean_size" -> jvm.boolean_size <- int_of_string b
                | "char_size" -> jvm.char_size <- int_of_string b
                | "ref_size" -> jvm.ref_size <- int_of_string b
+               | "header_size" -> jvm.header_size <- int_of_string b
+               | "align_size" -> jvm.align_size <- int_of_string b
                (*                | "arrayref_size" -> jvm.arrayref_size <- int_of_string b *)
                | _ -> 
                  (match Hashtbl.find_option jvm.others a  with
@@ -186,15 +190,30 @@ let parse_jvm jvm_spc jvm =
   in
   ()
 
-let make_json jvm myds used_arrays =
+let get_data_sizes tot align_size =
+  let modv = tot mod align_size in
+  if modv = 0 then
+    tot
+  else
+    align_size - modv + tot
+
+let make_json jvm myds used_arrays nopack =
   let ofile = "data.json" in
   let oc = open_out ofile in
   let b = Buffer.create 100 in
   let add str = Buffer.add_string b str in
   let newline () = Buffer.add_string b "\n" in
-  let acc_data cdata = 
-    cdata._int + cdata._bool + cdata._byte + cdata._char + cdata._double +
-    cdata._float + cdata._long + cdata._short + cdata._ref + cdata._arrayref
+  (* Function for accumulating data type sizes *)
+  let acc_data cdata jvm nopack =
+    let tot = cdata._int + cdata._bool + cdata._byte + cdata._char + cdata._double +
+              cdata._float + cdata._long + cdata._short + cdata._ref + cdata._arrayref +
+              jvm.header_size in
+    (* Padding matters *)
+    match nopack with
+    | false ->
+        get_data_sizes tot jvm.align_size
+    | true -> 
+      tot
   in
   let () = add "{\n" in
   let () = 
@@ -232,7 +251,7 @@ let make_json jvm myds used_arrays =
                 Buffer.add_string buf ",\n";
               let () = Buffer.add_string buf name in
               let () = Buffer.add_string buf ": " in
-              let () = Buffer.add_string buf (string_of_int (acc_data size)) in
+              let () = Buffer.add_string buf (string_of_int (acc_data size jvm nopack)) in
               buf
            ) myds (Buffer.create 500)) in
     let () = add "}]\n" in
@@ -249,11 +268,14 @@ let () =
   in
   let jvm_spec = ref "" in
   let cp = ref "" in
+  let nopack = ref false in
   let speclist = Arg.align [
       ("-jvm", Arg.Set_string jvm_spec, "<file> "^
                                         "     JVM configuration file");
       ("-cp", Arg.Set_string cp, "<classpath> "^
                                         "     Setting classpath");
+      ("-nopack", Arg.Set nopack, "<bool> "^
+                                        "     Do not pack memory space (default: false)");
     ] in
   let flist = ref [] in
   let () = Arg.parse speclist (fun x -> flist := x :: !flist ) usage_msg in
@@ -261,15 +283,60 @@ let () =
       let () = Arg.usage speclist usage_msg in
       exit 1 in
 
-  let jvm = {refsize=4;ousize=4;joohsize=4;foh=4;
-             byte_size=1;short_size=2;int_size=4;long_size=8;float_size=4;
-             double_size=8;boolean_size=1;char_size=2;
-             ref_size=4; others=(Hashtbl.create 10)
-            } in
+  (* 
+   * All memory allocations are aligned to addresses that are 
+   * divisible by 8 (bytes).
+   *
+   * Data type sizes according to JVM spec (in bytes)
+   * Refsize   : 4
+   * byte      : 1
+   * short     : 2
+   * int       : 4
+   * long      : 8
+   * float     : 4
+   * double    : 8
+   * boolean   : 1
+   * char      : 2
+   * header    : 8 (32-bit, default), 12 (64-bit)
+   * alignment : 8 
+   *)
+  let jvm = {
+    refsize       = 4;
+    ousize        = 4;
+    joohsize      = 4;
+    foh           = 4;
+    byte_size     = 1;
+    short_size    = 2;
+    int_size      = 4;
+    long_size     = 8;
+    float_size    = 4;
+    double_size   = 8;
+    boolean_size  = 1;
+    char_size     = 2;
+    ref_size      = 4; 
+    header_size   = 8; 
+    align_size    = 8; 
+    others=(Hashtbl.create 10)
+  } in
   let () = 
     if !jvm_spec <> "" then
       let () = parse_jvm !jvm_spec jvm in
       ()
+  in
+  let () = 
+    if !nopack then
+      begin
+        jvm.byte_size    <- get_data_sizes jvm.byte_size    jvm.align_size;
+        jvm.short_size   <- get_data_sizes jvm.short_size   jvm.align_size;
+        jvm.int_size     <- get_data_sizes jvm.int_size     jvm.align_size;
+        jvm.long_size    <- get_data_sizes jvm.long_size    jvm.align_size;
+        jvm.float_size   <- get_data_sizes jvm.float_size   jvm.align_size;
+        jvm.double_size  <- get_data_sizes jvm.double_size  jvm.align_size;
+        jvm.boolean_size <- get_data_sizes jvm.boolean_size jvm.align_size;
+        jvm.char_size    <- get_data_sizes jvm.char_size    jvm.align_size;
+        jvm.ref_size     <- get_data_sizes jvm.ref_size     jvm.align_size;
+        jvm.header_size  <- get_data_sizes jvm.header_size  jvm.align_size
+      end
   in
 
   let myds = Hashtbl.create 300 in
@@ -281,5 +348,5 @@ let () =
         ) fn) !flist in 
   let () = close_class_path clazz_path in
   let () = print_ds myds in
-  let () = make_json jvm myds used_arrays in
+  let () = make_json jvm myds used_arrays !nopack in
   ()
