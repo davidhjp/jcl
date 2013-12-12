@@ -126,17 +126,21 @@ let rec get_ds clazz myds jvm used_arrays cp =
              size_table._ref <- size_table._ref + jvm.ref_size
            | (TArray x) as arr ->
              let array_string = ("\""^ get_array_string arr ^"\"")in
-             let num = (match Hashtbl.find_option jvm.others array_string with
-                 | Some x -> x
-                 | None ->
-                   let () = 
-                     if (function | None -> true | _ -> false ) (Hashtbl.find_option used_arrays array_string) then
-                       let () = prerr_endline ("WARNING: Missing type '"^array_string^"' in the jvm file - "^
-                                               "automatically setting its size to 1") in
-                       Hashtbl.add used_arrays array_string 1 in
-                   1
-               ) in 
-             size_table._arrayref <- size_table._arrayref + num
+             let () =  
+               match Hashtbl.find_option used_arrays array_string with
+               | None ->
+                 let num = match(Hashtbl.find_option jvm.others array_string) with
+                   | None ->
+                     let () = prerr_endline ("WARNING: Missing type '"^array_string^"' in the jvm file - "^
+                                             "automatically setting its size to 1") in
+                     1
+                   | Some x ->
+                     x
+                 in
+                 Hashtbl.add used_arrays array_string num
+               | _ -> ()
+             in
+             size_table._arrayref <- size_table._arrayref + jvm.ref_size
           )
           (* Need to deal with static fields later *)
       ) all_fields in
