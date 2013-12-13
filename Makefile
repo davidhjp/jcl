@@ -1,6 +1,6 @@
 TYPECONV=`ocamlfind query type_conv`
 SEXPLIB=`ocamlfind query sexplib`
-all:
+all: buildtest
 	ocamlfind ocamlopt -g -annot -pp "camlp4o -I $(TYPECONV)\
 		-I $(SEXPLIB) pa_type_conv.cma pa_sexp_conv.cma" -o jcl  \
 		-linkpkg -package batteries -package camlzip -package javalib \
@@ -17,4 +17,4 @@ buildtest:
 	jar cvmf MANIFEST.MF agent.jar JavaInstrument/ObjectSize.class
 
 test:
-	java -javaagent:agent.jar $(TARGET)
+	java -javaagent:agent.jar JavaInstrument.Loader $(TARGET)
