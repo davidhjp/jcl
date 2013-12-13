@@ -7,6 +7,14 @@ all:
 		-package sexplib jcl.ml
 	javac mypackage/*.java
 clean:
-	@rm -f mypackage/*.class mypackage/*.jar
-	@rm -rf _build *.cmi *.cmx *.o *.cmo *.annot *.exe *.class *.json *.out
+	@rm -f mypackage/*.class mypackage/*.jar JavaInstrument/*.class \
+		agent.jar
+	@rm -rf _build *.cmi *.cmx *.o *.cmo *.annot *.exe *.class *.json *.out *.MF
 
+buildtest:
+	javac JavaInstrument/*.java
+	echo Premain-Class: JavaInstrument.ObjectSize > MANIFEST.MF
+	jar cvmf MANIFEST.MF agent.jar JavaInstrument/ObjectSize.class
+
+test:
+	java -javaagent:agent.jar $(TARGET)
