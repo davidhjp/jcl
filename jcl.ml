@@ -55,23 +55,6 @@ let print_ds myds =
   let () = flush stdout in
   close_out oc
 
-let rec get_value = function
-  | TBasic x ->
-    (match x with
-     | `Int -> "I"
-     | `Bool -> "Z"
-     | `Byte -> "B"
-     | `Char -> "C"
-     | `Double -> "D"
-     | `Float -> "F"
-     | `Long -> "J"
-     | `Short -> "S"
-    )
-  | TObject x ->
-    get_array_string x
-and get_array_string = function
-  | TArray x -> "["^(get_value x)
-  | TClass x -> "L"^(cn_name x)
 
 let rec get_all_fields cp l = function
   | JClass x -> 
@@ -126,7 +109,7 @@ let rec get_ds clazz myds jvm used_arrays cp =
              (* May be need to exclude static type? *)
              size_table._ref <- size_table._ref + jvm.ref_size
            | (TArray x) as arr ->
-             let array_string = ("\""^ get_array_string arr ^"\"")in
+             let array_string = ("\""^ Jclutil.get_array_string arr ^"\"")in
              let () =  
                match Hashtbl.find_option used_arrays array_string with
                | None ->

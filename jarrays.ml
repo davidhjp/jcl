@@ -4,6 +4,7 @@ open Javalib
 open JBasics
 open JBir
 open JProgram
+open Jclutil
 module Array = Batteries.Array
 module Option = Batteries.Option
 
@@ -24,7 +25,9 @@ let get_arrays header_size cp jclazz =
             let () = Array.iter 
                 (
                   function 
-                  | (NewArray _ ) as x -> 
+                  | (NewArray (a,b,c) ) as x -> 
+                    let ss = get_value b in
+                    print_endline ss;
                     print_endline "new array";
                     print_endline (print_instr x)
                   | _ -> ()
