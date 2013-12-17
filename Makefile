@@ -1,15 +1,24 @@
 TYPECONV=`ocamlfind query type_conv`
 SEXPLIB=`ocamlfind query sexplib`
-all: buildtest
+ARRAYGEN = arraygen.cmxa
+
+all: buildtest $(ARRAYGEN)
 	ocamlfind ocamlopt -g -annot -pp "camlp4o -I $(TYPECONV)\
 		-I $(SEXPLIB) pa_type_conv.cma pa_sexp_conv.cma" -o jcl  \
 		-linkpkg -package batteries -package camlzip -package javalib \
-		-package sexplib jcl.ml
+		-package sexplib -package sawja $(ARRAYGEN) jcl.ml
 	javac mypackage/*.java
+
+$(ARRAYGEN):
+	ocamlfind ocamlopt -a -g -annot -package batteries \
+		-package camlzip -package sawja -package javalib \
+		jarrays.ml -o $@
+
 clean:
 	@rm -f mypackage/*.class mypackage/*.jar JavaInstrument/*.class \
 		agent.jar
-	@rm -rf _build *.cmi *.cmx *.o *.cmo *.annot *.exe *.class *.json *.out *.MF
+	@rm -rf _build *.cmi *.cmx *.o *.cmo *.annot *.exe *.class *.json *.out *.MF *.cmxa\
+		*.a
 
 buildtest:
 	javac JavaInstrument/*.java

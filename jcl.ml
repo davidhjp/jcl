@@ -38,7 +38,8 @@ type json_type = {
   mutable boolean_size : int;
   mutable char_size : int;
   mutable ref_size : int;
-  mutable header_size : int;
+  mutable objheader_size : int;
+  mutable arrayheader_size : int;
   mutable align_size : int;
   others : (string, int) Std.Hashtbl.t
 }
@@ -176,7 +177,8 @@ let parse_jvm jvm_spc jvm =
                | "boolean_size" -> jvm.boolean_size <- int_of_string b
                | "char_size" -> jvm.char_size <- int_of_string b
                | "ref_size" -> jvm.ref_size <- int_of_string b
-               | "header_size" -> jvm.header_size <- int_of_string b
+               | "objheader_size" -> jvm.objheader_size <- int_of_string b
+               | "arrayheader_size" -> jvm.arrayheader_size <- int_of_string b
                | "align_size" -> jvm.align_size <- int_of_string b
                (*                | "arrayref_size" -> jvm.arrayref_size <- int_of_string b *)
                | _ -> 
@@ -211,7 +213,7 @@ let make_json jvm myds used_arrays nopack =
   let acc_data cdata jvm nopack =
     let tot = cdata._int + cdata._bool + cdata._byte + cdata._char + cdata._double +
               cdata._float + cdata._long + cdata._short + cdata._ref + cdata._arrayref +
-              jvm.header_size in
+              jvm.objheader_size in
     (* Padding matters *)
     match nopack with
     | false ->
@@ -301,25 +303,26 @@ let () =
    * double    : 8
    * boolean   : 1
    * char      : 2
-   * header    : 8 (32-bit, default), 12 (64-bit)
+   * objheader : 8 (32-bit, default), 12 (64-bit)
    * alignment : 8 
    *)
   let jvm = {
-    refsize       = 4;
-    ousize        = 4;
-    joohsize      = 4;
-    foh           = 4;
-    byte_size     = 1;
-    short_size    = 2;
-    int_size      = 4;
-    long_size     = 8;
-    float_size    = 4;
-    double_size   = 8;
-    boolean_size  = 1;
-    char_size     = 2;
-    ref_size      = 4; 
-    header_size   = 8; 
-    align_size    = 8; 
+    refsize           = 4;
+    ousize            = 4;
+    joohsize          = 4;
+    foh               = 4;
+    byte_size         = 1;
+    short_size        = 2;
+    int_size          = 4;
+    long_size         = 8;
+    float_size        = 4;
+    double_size       = 8;
+    boolean_size      = 1;
+    char_size         = 2;
+    ref_size          = 4; 
+    objheader_size    = 8; 
+    arrayheader_size  = 8 + 4 (* Object header + length-field *);
+    align_size        = 8; 
     others=(Hashtbl.create 10)
   } in
   let () = 
@@ -339,7 +342,7 @@ let () =
         jvm.boolean_size <- get_data_sizes jvm.boolean_size jvm.align_size;
         jvm.char_size    <- get_data_sizes jvm.char_size    jvm.align_size;
         jvm.ref_size     <- get_data_sizes jvm.ref_size     jvm.align_size;
-        jvm.header_size  <- get_data_sizes jvm.header_size  jvm.align_size
+        jvm.objheader_size  <- get_data_sizes jvm.objheader_size  jvm.align_size
       end
   in
 
@@ -352,5 +355,16 @@ let () =
         ) fn) !flist in 
   let () = close_class_path clazz_path in
   let () = print_ds myds in
+
+  let entry_point = ref "a.class" in
+  let () =
+    if !entry_point <> "" then
+      let () = iter ~debug:false (fun x -> (function | JClass _ -> Jarrays.get_arrays jvm.arrayheader_size !cp x
+                                                     | JInterface _ -> ()) x
+        ) !entry_point in 
+      ()
+  in
+
   let () = make_json jvm myds used_arrays !nopack in
+  
   ()
