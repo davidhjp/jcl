@@ -1,6 +1,7 @@
 open Sexplib
 open Std
 open Sexp
+open Sawja_pack
 open Javalib_pack
 open Javalib
 open JBasics
@@ -23,7 +24,7 @@ type class_data = {
 } 
 with sexp
 
-type json_type = {
+type jtype = {
   mutable refsize : int;
   mutable ousize : int;
   mutable joohsize : int;
@@ -44,6 +45,43 @@ type json_type = {
   others : (string, int) Std.Hashtbl.t
 }
 with sexp
+
+let rec get_value = function
+  | TBasic x ->
+    (match x with
+     | `Int -> "I"
+     | `Bool -> "Z"
+     | `Byte -> "B"
+     | `Char -> "C"
+     | `Double -> "D"
+     | `Float -> "F"
+     | `Long -> "J"
+     | `Short -> "S"
+    )
+  | TObject x ->
+    get_array_string x
+and get_array_string = function
+  | TArray x -> "["^(get_value x)
+  | TClass x -> "L"^(cn_name x)
+
+let rec get_array_type_size jvm = function
+  | TBasic x ->
+    (match x with
+     | `Int ->    jvm.int_size
+     | `Bool ->   jvm.long_size
+     | `Byte ->   jvm.byte_size
+     | `Char ->   jvm.char_size
+     | `Double -> jvm.double_size
+     | `Float ->  jvm.float_size
+     | `Long ->   jvm.long_size
+     | `Short ->  jvm.short_size
+    )
+  | TObject x ->
+    get_array_type_size_rec jvm x
+and get_array_type_size_rec jvm = function
+  | TArray x -> get_array_type_size jvm x
+  | TClass x -> jvm.ref_size
+
 
 let print_ds myds =
   let ofile = "data.out" in
@@ -109,7 +147,7 @@ let rec get_ds clazz myds jvm used_arrays cp =
              (* May be need to exclude static type? *)
              size_table._ref <- size_table._ref + jvm.ref_size
            | (TArray x) as arr ->
-             let array_string = ("\""^ Jclutil.get_array_string arr ^"\"")in
+             let array_string = ("\""^ get_array_string arr ^"\"")in
              let () =  
                match Hashtbl.find_option used_arrays array_string with
                | None ->
@@ -251,6 +289,67 @@ let make_json jvm myds used_arrays nopack =
   let () = flush stdout in
   close_out oc
 
+let compute_array_size header tsize exprlist =
+  let is_const = List.for_all (function | JBir.Const (`Int _) -> true | _ -> false ) exprlist in
+  let tsize = Int32.of_int tsize in
+  let prev_val = ref Int32.zero in
+  if is_const then
+    let l = List.mapi (fun i x ->
+        match x with
+        | JBir.Const (`Int c) when i = 0 ->
+          let () = prev_val := c in
+          Int32.mul c tsize
+        | JBir.Const (`Int c) ->
+          let v = Int32.mul c tsize in
+          let v = Int32.mul v !prev_val in
+          let () = prev_val := c in
+          v
+        | _ -> failwith "Unexpected error while computing array size"                 
+      ) exprlist
+    in
+    Some (Int32.add (Int32.of_int header) (List.fold_left Int32.add Int32.zero l))
+  else
+    None
+
+let get_arrays header_size cp jclazz jvm =
+  let objtbl = Hashtbl.create 1000 in
+  let (ptra,cl) = JRTA.parse_program cp 
+      (make_cms (Javalib.get_name jclazz) JProgram.main_signature) in
+  let pbir = JProgram.map_program2
+      (fun _ -> JBir.transform ~bcv:false ~ch_link:false ~formula:false ~formula_cmd:[] )
+      (Some (fun code pp ->  (Ptmap.find pp (JBir.pc_bc2ir code)))
+      ) ptra in
+  let () = JProgram.iter (fun node -> 
+      let () = JProgram.cm_iter (fun cm -> 
+          match cm.cm_implementation with
+          | Native -> ()
+          | Java x -> 
+            let instr = Lazy.force x in
+            let co = JBir.code instr in
+            let () = Array.iter 
+                (
+                  function 
+                  | (JBir.NewArray (a,b,c) ) as x -> 
+                    let size = get_array_type_size jvm b in
+                    let size = compute_array_size jvm.arrayheader_size size c in
+                    let () = 
+                      match size with
+                      | Some x ->
+                          print_endline (Int32.to_string x)
+                      | None ->
+                          print_endline "None"
+                    in
+                    print_endline "new array";
+                    print_endline (JBir.print_instr x)
+                  | _ -> ()
+                ) co in
+            ()
+
+        ) node in
+      ()
+    ) pbir in
+  ()
+
 let () =
   let usage_msg = 
     "Usage: jcl <filename>"
@@ -313,19 +412,21 @@ let () =
       let () = parse_jvm !jvm_spec jvm in
       ()
   in
+  (* Pack header regardless whether the option was given *)
+  let () = jvm.arrayheader_size  <- get_data_sizes jvm.arrayheader_size  jvm.align_size in
   let () = 
     if !nopack then
       begin
-        jvm.byte_size    <- get_data_sizes jvm.byte_size    jvm.align_size;
-        jvm.short_size   <- get_data_sizes jvm.short_size   jvm.align_size;
-        jvm.int_size     <- get_data_sizes jvm.int_size     jvm.align_size;
-        jvm.long_size    <- get_data_sizes jvm.long_size    jvm.align_size;
-        jvm.float_size   <- get_data_sizes jvm.float_size   jvm.align_size;
-        jvm.double_size  <- get_data_sizes jvm.double_size  jvm.align_size;
-        jvm.boolean_size <- get_data_sizes jvm.boolean_size jvm.align_size;
-        jvm.char_size    <- get_data_sizes jvm.char_size    jvm.align_size;
-        jvm.ref_size     <- get_data_sizes jvm.ref_size     jvm.align_size;
-        jvm.objheader_size  <- get_data_sizes jvm.objheader_size  jvm.align_size
+        jvm.byte_size         <- get_data_sizes jvm.byte_size         jvm.align_size;
+        jvm.short_size        <- get_data_sizes jvm.short_size        jvm.align_size;
+        jvm.int_size          <- get_data_sizes jvm.int_size          jvm.align_size;
+        jvm.long_size         <- get_data_sizes jvm.long_size         jvm.align_size;
+        jvm.float_size        <- get_data_sizes jvm.float_size        jvm.align_size;
+        jvm.double_size       <- get_data_sizes jvm.double_size       jvm.align_size;
+        jvm.boolean_size      <- get_data_sizes jvm.boolean_size      jvm.align_size;
+        jvm.char_size         <- get_data_sizes jvm.char_size         jvm.align_size;
+        jvm.ref_size          <- get_data_sizes jvm.ref_size          jvm.align_size;
+        jvm.objheader_size    <- get_data_sizes jvm.objheader_size    jvm.align_size;
       end
   in
 
@@ -342,7 +443,7 @@ let () =
   let entry_point = ref "a.class" in
   let () =
     if !entry_point <> "" then
-      let () = iter ~debug:false (fun x -> (function | JClass _ -> Jarrays.get_arrays jvm.arrayheader_size !cp x
+      let () = iter ~debug:false (fun x -> (function | JClass _ -> get_arrays jvm.arrayheader_size !cp x jvm
                                                      | JInterface _ -> ()) x
         ) !entry_point in 
       ()
