@@ -25,23 +25,23 @@ type class_data = {
 with sexp
 
 type jtype = {
-  mutable refsize : int;
-  mutable ousize : int;
-  mutable joohsize : int;
-  mutable foh : int;
+  mutable refsize          : int;
+  mutable ousize           : int;
+  mutable joohsize         : int;
+  mutable foh              : int;
 
-  mutable byte_size : int;
-  mutable short_size : int;
-  mutable int_size : int;
-  mutable long_size : int;
-  mutable float_size : int;
-  mutable double_size : int;
-  mutable boolean_size : int;
-  mutable char_size : int;
-  mutable ref_size : int;
-  mutable objheader_size : int;
+  mutable byte_size        : int;
+  mutable short_size       : int;
+  mutable int_size         : int;
+  mutable long_size        : int;
+  mutable float_size       : int;
+  mutable double_size      : int;
+  mutable boolean_size     : int;
+  mutable char_size        : int;
+  mutable ref_size         : int;
+  mutable objheader_size   : int;
   mutable arrayheader_size : int;
-  mutable align_size : int;
+  mutable align_size       : int;
   others : (string, int) Std.Hashtbl.t
 }
 with sexp
@@ -83,15 +83,28 @@ and get_array_type_size_rec jvm = function
   | TClass x -> jvm.ref_size
 
 
-let print_ds myds =
-  let ofile = "data.out" in
-  let oc = open_out ofile in
+let print_ds myds jvm =
+  let () = Log.log ("============ Size of Classses ============") in
+  let () = Log.log ("Type sizes : ") in
+  let () = Log.log (Printf.sprintf "       %s : %d " "byte"         jvm.byte_size        ) in
+  let () = Log.log (Printf.sprintf "       %s : %d " "short"        jvm.short_size       ) in
+  let () = Log.log (Printf.sprintf "       %s : %d " "int"          jvm.int_size         ) in
+  let () = Log.log (Printf.sprintf "       %s : %d " "long"         jvm.long_size        ) in
+  let () = Log.log (Printf.sprintf "       %s : %d " "float"        jvm.float_size       ) in
+  let () = Log.log (Printf.sprintf "       %s : %d " "doulble"      jvm.double_size      ) in
+  let () = Log.log (Printf.sprintf "       %s : %d " "boolean"      jvm.boolean_size     ) in
+  let () = Log.log (Printf.sprintf "       %s : %d " "char"         jvm.char_size        ) in
+  let () = Log.log (Printf.sprintf "       %s : %d " "Reference"    jvm.ref_size         ) in
+  let () = Log.log (Printf.sprintf "       %s : %d " "ObjHeader"    jvm.objheader_size   ) in
+  let () = Log.log (Printf.sprintf "       %s : %d " "ArrayHeader"  jvm.arrayheader_size ) in
+  let () = Log.log (Printf.sprintf "       %s : %d " "Alignment"    jvm.align_size       ) in
   let () = Hashtbl.iter (fun k v -> 
-      Printf.fprintf oc "%s\n(_int:%d _bool:%d _byte:%d _char:%d _double:%d _float:%d\n_long:%d _short:%d _ref:%d _arrayref:%d)\n" 
-        k v._int v._bool v._byte v._char v._double v._float v._long v._short v._ref v._arrayref
+      let () = Log.log ("Class name : "^k) in
+      Log.log (Printf.sprintf "(_int:%d _bool:%d _byte:%d _char:%d _double:%d _float:%d _long:%d _short:%d _ref:%d _arrayref:%d)" 
+                 v._int v._bool v._byte v._char v._double v._float v._long v._short v._ref v._arrayref)
     ) myds in
-  let () = flush stdout in
-  close_out oc
+  let () = Log.log "=========================================" in
+  ()
 
 
 let rec get_all_fields cp l = function
@@ -168,7 +181,7 @@ let rec get_ds ?(entry_point=false) clazz myds jvm cp used_arrays unrsv_arrays  
             (* Need to deal with static fields later *)
       ) all_fields in
     ()
-  | Some x -> print_endline ("INFO: class "^(cn_name (get_name clazz))^" already parsed")
+  | Some x -> Log.log ("INFO: class "^(cn_name (get_name clazz))^" already parsed")
 
 let parse_jvm jvm_spc jvm =
   let ic = open_in jvm_spc in
@@ -345,9 +358,8 @@ let get_arrays header_size cp jclazz jvm used_arrays unresolved_arrays =
                 | (JBir.NewArray (a,b,c) ) as minstr -> 
                   let jtype = get_value ~type_only:true b in
                   let signature = (String.make (List.length c) '[') ^ jtype in 
-                  print_endline signature;
-                  print_endline "new array"; 
-                  print_endline (JBir.print_instr minstr);
+                  let () = Log.log ("Found an array : "^signature) in 
+                  let () = Log.log ("Instr : "^(JBir.print_instr minstr)) in
                   (match Hashtbl.find_option unresolved_arrays signature with
                    | None -> 
                      let size = get_array_type_size jvm b in
@@ -365,58 +377,62 @@ let get_arrays header_size cp jclazz jvm used_arrays unresolved_arrays =
                                | Some x ->
                                  Int32.of_int x
                              in
-                             print_endline ("ADDED "^(Int32.to_string num));
+                             let () = Log.log ("Size of "^(Int32.to_string num)^" added to the signature "^signature) in
                              Hashtbl.add used_arrays signature num
                            | Some p when p < x -> 
-                             print_endline ("REPLACED "^(Int32.to_string p)^" to "^(Int32.to_string x) );
+                             let () = Log.log ("Size of "^(Int32.to_string x)^" replaced with "^
+                                               (Int32.to_string p)^",  signature : "^signature) in
                              Hashtbl.replace used_arrays signature x
                            | Some p when p > x -> 
-                             print_endline ("LESS "^(Int32.to_string p)^" > "^(Int32.to_string x) );
+                             Log.log ("Size of "^(Int32.to_string x)^" is less than "^
+                                      (Int32.to_string p)^" : not replaced,  signature : "^signature)
                            | _ -> ()
                          end;
                        | None ->
-                         let () = prerr_endline ("WARNING: Could not resolve size of '"^signature^"' - Automatically setting it to 1 \n\
-                                                                                                   please set it manually in the jvm file") in
+                         let () = Log.log ~level:Log.WARNING 
+                             ("Could not resolve size of '"^signature^"' - Automatically setting it to 1 please set it manually in the jvm file") in
                          let () = Hashtbl.remove used_arrays signature in
                          Hashtbl.replace unresolved_arrays signature 1
                      end;
                    | _ -> 
-                     print_endline ("NOTRESOLVED : "^signature);
-                     ()
+                     Log.log (signature^" was previously found COULD NOT BE RESOLVED")
                   );
                 | _ -> ()
               ) co
         ) node
     ) pbir in
-  ()
+  ();;
 
 let () =
-  let usage_msg = 
-    "Usage: jcl <filename>"
-  in
-  let jvm_spec = ref "" in
-  let cp = ref "" in
-  let nopack = ref false in
-  let entry_point = ref "" in
-  let speclist = Arg.align [
-      ("-jvm", Arg.Set_string jvm_spec, 
-       "<file>       JVM configuration file");
-      ("-cp", Arg.Set_string cp, 
-       "<classpath>  Setting classpath");
-      ("-main", Arg.Set_string entry_point, 
-       "<file>       Class file which contains main method.\n\
-       \                       This option is used to analyze maximum\n\
-       \                       size of array types used in the program.");
-      ("-nopack", Arg.Set nopack, 
-       "<bool>       Do not pack memory space (default: false)");
-    ] in
-  let flist = ref [] in
-  let () = Arg.parse speclist (fun x -> flist := x :: !flist ) usage_msg in
-  let () = if List.is_empty !flist then
-      let () = Arg.usage speclist usage_msg in
-      exit 1 in
+  try
+    let usage_msg = 
+      "Usage: jcl <filename>"
+    in
+    let jvm_spec = ref "" in
+    let cp = ref "" in
+    let nopack = ref false in
+    let entry_point = ref "" in
+    let speclist = Arg.align [
+        ("-jvm", Arg.Set_string jvm_spec, 
+         "<file>       JVM configuration file");
+        ("-cp", Arg.Set_string cp, 
+         "<classpath>  Setting classpath");
+        ("-main", Arg.Set_string entry_point, 
+         "<file>       Class file which contains main method.\n\
+         \                       This option is used to analyze maximum\n\
+         \                       size of array types used in the program.");
+        ("-nopack", Arg.Set nopack, 
+         "<bool>       Do not pack memory space (default: false)");
+        ("-log", Arg.Bool (fun x -> Log.set_mode x), 
+         "<true|false> Output a log file (default: false)");
+      ] in
+    let flist = ref [] in
+    let () = Arg.parse speclist (fun x -> flist := x :: !flist ) usage_msg in
+    let () = if List.is_empty !flist then
+        let () = Arg.usage speclist usage_msg in
+        exit 1 in
 
-  (* 
+    (* 
    * All memory allocations are aligned to addresses that are 
    * divisible by 8 (bytes).
    *
@@ -433,77 +449,88 @@ let () =
    * objheader : 8 (32-bit, default), 12 (64-bit)
    * alignment : 8 
    *)
-  let jvm = {
-    refsize           = 4;
-    ousize            = 4;
-    joohsize          = 4;
-    foh               = 4;
-    byte_size         = 1;
-    short_size        = 2;
-    int_size          = 4;
-    long_size         = 8;
-    float_size        = 4;
-    double_size       = 8;
-    boolean_size      = 1;
-    char_size         = 2;
-    ref_size          = 4; 
-    objheader_size    = 8; 
-    arrayheader_size  = 8 + 4 (* Object header + length-field *);
-    align_size        = 8; 
-    others=(Hashtbl.create 10)
-  } in
-  let () = 
-    if !jvm_spec <> "" then
-      let () = parse_jvm !jvm_spec jvm in
-      ()
-  in
-  (* Do not pack header regardless whether the option was given *)
-  let () = jvm.arrayheader_size  <- get_data_sizes jvm.arrayheader_size  jvm.align_size in
-  let () = 
-    if !nopack then
-      begin
-        jvm.byte_size         <- get_data_sizes jvm.byte_size         jvm.align_size;
-        jvm.short_size        <- get_data_sizes jvm.short_size        jvm.align_size;
-        jvm.int_size          <- get_data_sizes jvm.int_size          jvm.align_size;
-        jvm.long_size         <- get_data_sizes jvm.long_size         jvm.align_size;
-        jvm.float_size        <- get_data_sizes jvm.float_size        jvm.align_size;
-        jvm.double_size       <- get_data_sizes jvm.double_size       jvm.align_size;
-        jvm.boolean_size      <- get_data_sizes jvm.boolean_size      jvm.align_size;
-        jvm.char_size         <- get_data_sizes jvm.char_size         jvm.align_size;
-        jvm.ref_size          <- get_data_sizes jvm.ref_size          jvm.align_size;
-        jvm.objheader_size    <- get_data_sizes jvm.objheader_size    jvm.align_size;
-      end
-  in
+    let jvm = {
+      refsize           = 4;
+      ousize            = 4;
+      joohsize          = 4;
+      foh               = 4;
+      byte_size         = 1;
+      short_size        = 2;
+      int_size          = 4;
+      long_size         = 8;
+      float_size        = 4;
+      double_size       = 8;
+      boolean_size      = 1;
+      char_size         = 2;
+      ref_size          = 4; 
+      objheader_size    = 8; 
+      arrayheader_size  = 8 + 4 (* Object header + length-field *);
+      align_size        = 8; 
+      others=(Hashtbl.create 10)
+    } in
+    let () = 
+      if !jvm_spec <> "" then
+        let () = parse_jvm !jvm_spec jvm in
+        ()
+    in
+    (* Do not pack header regardless whether the option was given *)
+    let () = jvm.arrayheader_size  <- get_data_sizes jvm.arrayheader_size  jvm.align_size in
+    let () = 
+      if !nopack then
+        begin
+          jvm.byte_size         <- get_data_sizes jvm.byte_size         jvm.align_size;
+          jvm.short_size        <- get_data_sizes jvm.short_size        jvm.align_size;
+          jvm.int_size          <- get_data_sizes jvm.int_size          jvm.align_size;
+          jvm.long_size         <- get_data_sizes jvm.long_size         jvm.align_size;
+          jvm.float_size        <- get_data_sizes jvm.float_size        jvm.align_size;
+          jvm.double_size       <- get_data_sizes jvm.double_size       jvm.align_size;
+          jvm.boolean_size      <- get_data_sizes jvm.boolean_size      jvm.align_size;
+          jvm.char_size         <- get_data_sizes jvm.char_size         jvm.align_size;
+          jvm.ref_size          <- get_data_sizes jvm.ref_size          jvm.align_size;
+          jvm.objheader_size    <- get_data_sizes jvm.objheader_size    jvm.align_size;
+        end
+    in
 
-  let myds = Hashtbl.create 300 in
-  let used_arrays = Hashtbl.create 10 in 
-  let unrsv_arrays = Hashtbl.create 10 in 
-  let clazz_path = class_path !cp in
-  let ep = !entry_point <> "" in
-  let () = List.iter (fun fn -> 
-      iter ~debug:false (fun x -> (function | JClass _ -> get_ds x ~entry_point:ep myds jvm clazz_path used_arrays unrsv_arrays
-                                            | JInterface _ -> ()) x
-        ) fn) !flist in 
-  let () = close_class_path clazz_path in
-  let () = print_ds myds in
+    let myds = Hashtbl.create 300 in
+    let used_arrays = Hashtbl.create 10 in 
+    let unrsv_arrays = Hashtbl.create 10 in 
+    let clazz_path = class_path !cp in
+    let ep = !entry_point <> "" in
+    let () = List.iter (fun fn -> 
+        iter ~debug:false (fun x -> (function | JClass _ -> get_ds x ~entry_point:ep myds jvm clazz_path used_arrays unrsv_arrays
+                                              | JInterface _ -> ()) x
+          ) fn) !flist in 
+    let () = close_class_path clazz_path in
 
-  let () =
-    if ep then
-      let () = iter ~debug:false (fun x -> (function | JClass _ -> get_arrays jvm.arrayheader_size !cp x jvm used_arrays unrsv_arrays
-                                                     | JInterface _ -> ()) x
-        ) !entry_point in 
-      ()
-  in
-  print_endline "resolved : ";
-  Hashtbl.iter (fun k v -> 
-      print_endline (k^" : "^(Int32.to_string v));
-    ) used_arrays ;
-  print_endline "unresolved : ";
-  Hashtbl.iter (fun k v -> 
-      print_endline (k^" : "^(string_of_int v));
-    ) unrsv_arrays ;
+    let () =
+      if ep then
+        let () = iter ~debug:false (fun x -> (function | JClass _ -> get_arrays jvm.arrayheader_size !cp x jvm used_arrays unrsv_arrays
+                                                       | JInterface _ -> ()) x
+          ) !entry_point in 
+        ()
+    in
 
-  let () = make_json jvm myds used_arrays unrsv_arrays !nopack in
+    let () = make_json jvm myds used_arrays unrsv_arrays !nopack in
 
-  ()
+    let () = 
+      let () = Log.log "========== Resolved array types ==========" in
+      let () = Hashtbl.iter (fun k v -> 
+          Log.log (k^" : "^(Int32.to_string v));
+        ) used_arrays ;
+      in
+      let () = Log.log "========= Unresolved array types =========" in
+      Hashtbl.iter (fun k v -> 
+          Log.log (k^" : "^(string_of_int v));
+        ) unrsv_arrays
+    in
+    let () = print_ds myds jvm in
+    ()
+  with
+  | _ as x -> 
+    let () = Log.log ~level:Log.ERROR (Printexc.to_string x) in
+    let () = Log.print_file ~force:true () in
+    raise x
+in
+Log.print_file ()
+
 
