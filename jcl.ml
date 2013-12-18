@@ -267,7 +267,7 @@ let make_json jvm myds used_arrays unrsv_arrays nopack =
     let () = Buffer.add_buffer b 
         (Hashtbl.fold 
            (fun name size buf -> 
-              let () = Buffer.add_string buf name in
+              let () = Buffer.add_string buf ("\""^name^"\"") in
               let () = Buffer.add_string buf ": " in
               let () = Buffer.add_string buf (Int32.to_string size) in
               let () = Buffer.add_string buf ",\n" in
@@ -277,7 +277,7 @@ let make_json jvm myds used_arrays unrsv_arrays nopack =
     let () = Buffer.add_buffer b 
         (Hashtbl.fold 
            (fun name size buf -> 
-              let () = Buffer.add_string buf name in
+              let () = Buffer.add_string buf ("\""^name^"\"") in
               let () = Buffer.add_string buf ": " in
               let () = Buffer.add_string buf (string_of_int size) in
               let () = Buffer.add_string buf ",\n" in
