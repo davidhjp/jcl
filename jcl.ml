@@ -401,8 +401,9 @@ let () =
       ("-cp", Arg.Set_string cp, 
        "<classpath>  Setting classpath");
       ("-main", Arg.Set_string entry_point, 
-       "<file>       Class file which contains main method\n\
-       \             This option is used to analyze maximum size of array types used in the program");
+       "<file>       Class file which contains main method.\n\
+       \                       This option is used to analyze maximum\n\
+       \                       size of array types used in the program.");
       ("-nopack", Arg.Set nopack, 
        "<bool>       Do not pack memory space (default: false)");
     ] in
