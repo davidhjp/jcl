@@ -384,8 +384,7 @@ let get_arrays header_size cp jclazz jvm used_arrays unresolved_arrays =
                            | _ -> ()
                          end;
                        | None ->
-                         let () = Log.log ~level:Log.WARNING 
-                             ("Could not resolve size of '"^signature^"' - Automatically setting it to 1 please set it manually in the jvm file") in
+                         let () = Log.log ~level:Log.WARNING ("Could not resolve the size of '"^signature^"' - automatically setting it to 1.") in
                          let () = Hashtbl.remove used_arrays signature in
                          Hashtbl.replace unresolved_arrays signature 1
                      end;
