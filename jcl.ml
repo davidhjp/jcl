@@ -46,7 +46,7 @@ type jtype = {
 }
 with sexp
 
-let rec get_value = function
+let rec get_value ?(type_only=false) = function
   | TBasic x ->
     (match x with
      | `Int -> "I"
@@ -59,10 +59,10 @@ let rec get_value = function
      | `Short -> "S"
     )
   | TObject x ->
-    get_array_string x
-and get_array_string = function
-  | TArray x -> "["^(get_value x)
-  | TClass x -> "L"^(cn_name x)
+    get_array_string ~type_only x
+and get_array_string ?(type_only=false) = function
+  | TArray x -> if type_only then (get_value ~type_only x) else "["^(get_value ~type_only x)
+  | TClass x -> if type_only then (cn_name x) else "L"^(cn_name x)
 
 let rec get_array_type_size jvm = function
   | TBasic x ->
@@ -88,7 +88,7 @@ let print_ds myds =
   let oc = open_out ofile in
   let () = Hashtbl.iter (fun k v -> 
       Printf.fprintf oc "%s\n(_int:%d _bool:%d _byte:%d _char:%d _double:%d _float:%d\n_long:%d _short:%d _ref:%d _arrayref:%d)\n" 
-          k v._int v._bool v._byte v._char v._double v._float v._long v._short v._ref v._arrayref
+        k v._int v._bool v._byte v._char v._double v._float v._long v._short v._ref v._arrayref
     ) myds in
   let () = flush stdout in
   close_out oc
@@ -102,7 +102,7 @@ let rec get_all_fields cp l = function
        (try
           let super_class = get_class cp clazz in
           let () = f_iter (fun x -> l := x :: !l ) super_class in
-(*           let () = print_endline ("super : "^(cn_name (get_name super_class))) in *)
+          (*           let () = print_endline ("super : "^(cn_name (get_name super_class))) in *)
           get_all_fields cp !l super_class
         with
         | No_class_found x -> raise (No_class_found ("Unable to find "^x^" in classpath check -cp option?")))
@@ -110,7 +110,7 @@ let rec get_all_fields cp l = function
     )
   | _ -> failwith ("This must be alwasy JClass")
 
-let rec get_ds clazz myds jvm used_arrays cp =
+let rec get_ds ?(entry_point=false) clazz myds jvm cp used_arrays unrsv_arrays  =
   let clazz_string = (cn_name (get_name clazz)) in
   let cd = Hashtbl.find_option myds clazz_string in
   match cd with
@@ -118,7 +118,7 @@ let rec get_ds clazz myds jvm used_arrays cp =
     let size_table = 
       {_int=0;_bool=0;_byte=0;_char=0;_double=0;_float=0;_long=0;_short=0;_ref=0;_arrayref=0;} in
     let () = Hashtbl.add myds clazz_string size_table in
-(*     print_endline ("**** getting super of "^clazz_string); *)
+    (*     print_endline ("**** getting super of "^clazz_string); *)
     let all_fields = get_all_fields cp [] clazz in
     let all_fields = f_fold (fun x all -> x :: all ) clazz all_fields in
 (*
@@ -128,43 +128,44 @@ let rec get_ds clazz myds jvm used_arrays cp =
       ) all_fields in
 *)
     let () = List.iter (fun x -> 
-      if not(is_static_field x) then
-        match fs_type (get_field_signature x) with
-        | TBasic x ->
-          (match x with
-           | `Int -> size_table._int <-  size_table._int + jvm.int_size
-           | `Bool -> size_table._bool <-  size_table._bool + jvm.boolean_size
-           | `Byte -> size_table._byte <-  size_table._byte + jvm.byte_size
-           | `Char -> size_table._char <-  size_table._char + jvm.char_size
-           | `Double -> size_table._double <-  size_table._double + jvm.double_size
-           | `Float -> size_table._float <-  size_table._float + jvm.float_size
-           | `Long -> size_table._long <-  size_table._long + jvm.long_size
-           | `Short -> size_table._short <-  size_table._short + jvm.short_size
-          )
-        | TObject x ->
-          (match x with
-           | TClass x ->
-             (* May be need to exclude static type? *)
-             size_table._ref <- size_table._ref + jvm.ref_size
-           | (TArray x) as arr ->
-             let array_string = ("\""^ get_array_string arr ^"\"")in
-             let () =  
-               match Hashtbl.find_option used_arrays array_string with
-               | None ->
-                 let num = match(Hashtbl.find_option jvm.others array_string) with
-                   | None ->
-                     let () = prerr_endline ("WARNING: Missing type '"^array_string^"' in the jvm file - "^
-                                             "automatically setting its size to 1") in
-                     1
-                   | Some x ->
-                     x
-                 in
-                 Hashtbl.add used_arrays array_string num
-               | _ -> ()
-             in
-             size_table._arrayref <- size_table._arrayref + jvm.ref_size
-          )
-          (* Need to deal with static fields later *)
+        if not(is_static_field x) then
+          match fs_type (get_field_signature x) with
+          | TBasic x ->
+            (match x with
+             | `Int -> size_table._int <-  size_table._int + jvm.int_size
+             | `Bool -> size_table._bool <-  size_table._bool + jvm.boolean_size
+             | `Byte -> size_table._byte <-  size_table._byte + jvm.byte_size
+             | `Char -> size_table._char <-  size_table._char + jvm.char_size
+             | `Double -> size_table._double <-  size_table._double + jvm.double_size
+             | `Float -> size_table._float <-  size_table._float + jvm.float_size
+             | `Long -> size_table._long <-  size_table._long + jvm.long_size
+             | `Short -> size_table._short <-  size_table._short + jvm.short_size
+            )
+          | TObject x ->
+            (match x with
+             | TClass x ->
+               (* May be need to exclude static type? *)
+               size_table._ref <- size_table._ref + jvm.ref_size
+             | (TArray x) as arr ->
+               if not entry_point then(
+                 let array_string = get_array_string arr  in
+                 match 
+                   (Hashtbl.find_option unrsv_arrays array_string,Hashtbl.find_option used_arrays array_string)
+                 with
+                 | (None,None) ->
+                   (match(Hashtbl.find_option jvm.others array_string) with
+                    | None ->
+                      let () = prerr_endline ("WARNING: Missing type '"^array_string^"' in the jvm file - "^
+                                              "automatically setting its size to 1") in
+                      Hashtbl.add unrsv_arrays array_string 1
+                    | Some x ->
+                      Hashtbl.add used_arrays array_string (Int32.of_int x)
+                   )
+                 | _ -> ()
+               );
+               size_table._arrayref <- size_table._arrayref + jvm.ref_size
+            )
+            (* Need to deal with static fields later *)
       ) all_fields in
     ()
   | Some x -> print_endline ("INFO: class "^(cn_name (get_name clazz))^" already parsed")
@@ -224,7 +225,7 @@ let get_data_sizes tot align_size =
   else
     align_size - modv + tot
 
-let make_json jvm myds used_arrays nopack =
+let make_json jvm myds used_arrays unrsv_arrays nopack =
   let ofile = "data.json" in
   let oc = open_out ofile in
   let b = Buffer.create 100 in
@@ -238,7 +239,7 @@ let make_json jvm myds used_arrays nopack =
     (* Padding matters *)
     match nopack with
     | false ->
-        get_data_sizes tot jvm.align_size
+      get_data_sizes tot jvm.align_size
     | true -> 
       tot
   in
@@ -262,6 +263,17 @@ let make_json jvm myds used_arrays nopack =
     let () = add "," in 
     let () = newline () in
     let () = add "ApplicationTypeSizes : [{\n" in
+    let () = add "_comment1 : \"Resolved Array Types : \",\n" in
+    let () = Buffer.add_buffer b 
+        (Hashtbl.fold 
+           (fun name size buf -> 
+              let () = Buffer.add_string buf name in
+              let () = Buffer.add_string buf ": " in
+              let () = Buffer.add_string buf (Int32.to_string size) in
+              let () = Buffer.add_string buf ",\n" in
+              buf
+           ) used_arrays (Buffer.create 500)) in
+    let () = add "_comment2 : \"Unresolved Array Types : \",\n" in
     let () = Buffer.add_buffer b 
         (Hashtbl.fold 
            (fun name size buf -> 
@@ -270,7 +282,8 @@ let make_json jvm myds used_arrays nopack =
               let () = Buffer.add_string buf (string_of_int size) in
               let () = Buffer.add_string buf ",\n" in
               buf
-           ) used_arrays (Buffer.create 500)) in
+           ) unrsv_arrays (Buffer.create 500)) in
+    let () = add "_comment3 : \"Classes : \",\n" in
     let () = Buffer.add_buffer b 
         (Hashtbl.fold 
            (fun name size buf -> 
@@ -311,8 +324,7 @@ let compute_array_size header tsize exprlist =
   else
     None
 
-let get_arrays header_size cp jclazz jvm =
-  let objtbl = Hashtbl.create 1000 in
+let get_arrays header_size cp jclazz jvm used_arrays unresolved_arrays =
   let (ptra,cl) = JRTA.parse_program cp 
       (make_cms (Javalib.get_name jclazz) JProgram.main_signature) in
   let pbir = JProgram.map_program2
@@ -320,33 +332,58 @@ let get_arrays header_size cp jclazz jvm =
       (Some (fun code pp ->  (Ptmap.find pp (JBir.pc_bc2ir code)))
       ) ptra in
   let () = JProgram.iter (fun node -> 
-      let () = JProgram.cm_iter (fun cm -> 
+      JProgram.cm_iter (fun cm -> 
           match cm.cm_implementation with
           | Native -> ()
           | Java x -> 
             let instr = Lazy.force x in
             let co = JBir.code instr in
-            let () = Array.iter 
-                (
-                  function 
-                  | (JBir.NewArray (a,b,c) ) as x -> 
-                    let size = get_array_type_size jvm b in
-                    let size = compute_array_size jvm.arrayheader_size size c in
-                    let () = 
-                      match size with
-                      | Some x ->
-                          print_endline (Int32.to_string x)
-                      | None ->
-                          print_endline "None"
-                    in
-                    print_endline "new array";
-                    print_endline (JBir.print_instr x)
-                  | _ -> ()
-                ) co in
-            ()
-
-        ) node in
-      ()
+            Array.iter 
+              (
+                function 
+                | (JBir.NewArray (a,b,c) ) as minstr -> 
+                  let jtype = get_value ~type_only:true b in
+                  let signature = (String.make (List.length c) '[') ^ jtype in 
+                  print_endline signature;
+                  print_endline "new array"; 
+                  print_endline (JBir.print_instr minstr);
+                  (match Hashtbl.find_option unresolved_arrays signature with
+                   | None -> 
+                     let size = get_array_type_size jvm b in
+                     let size = compute_array_size jvm.arrayheader_size size c in
+                     begin
+                       match size with
+                       | Some x ->
+                         begin 
+                           match Hashtbl.find_option used_arrays signature with
+                           | None ->
+                             let num = 
+                               match(Hashtbl.find_option jvm.others signature) with
+                               | None ->
+                                 x
+                               | Some x ->
+                                 Int32.of_int x
+                             in
+                             print_endline ("ADDED "^(Int32.to_string num));
+                             Hashtbl.add used_arrays signature num
+                           | Some p when p < x -> 
+                             print_endline ("REPLACED "^(Int32.to_string p)^" to "^(Int32.to_string x) );
+                             Hashtbl.replace used_arrays signature x
+                           | _ -> ()
+                         end;
+                       | None ->
+                         let () = prerr_endline ("WARNING: Could not resolve size of '"^signature^"' - Automatically setting it to 1 \n\
+                                                                                                   please set it manually in the jvm file") in
+                         let () = Hashtbl.remove used_arrays signature in
+                         Hashtbl.replace unresolved_arrays signature 1
+                     end;
+                   | _ -> 
+                     print_endline ("NOTRESOLVED : "^signature);
+                     ()
+                  );
+                | _ -> ()
+              ) co
+        ) node
     ) pbir in
   ()
 
@@ -357,13 +394,17 @@ let () =
   let jvm_spec = ref "" in
   let cp = ref "" in
   let nopack = ref false in
+  let entry_point = ref "" in
   let speclist = Arg.align [
-      ("-jvm", Arg.Set_string jvm_spec, "<file> "^
-                                        "     JVM configuration file");
-      ("-cp", Arg.Set_string cp, "<classpath> "^
-                                        "     Setting classpath");
-      ("-nopack", Arg.Set nopack, "<bool> "^
-                                        "     Do not pack memory space (default: false)");
+      ("-jvm", Arg.Set_string jvm_spec, 
+       "<file>       JVM configuration file");
+      ("-cp", Arg.Set_string cp, 
+       "<classpath>  Setting classpath");
+      ("-main", Arg.Set_string entry_point, 
+       "<file>       Class file which contains main method\n\
+       \             This option is used to analyze maximum size of array types used in the program");
+      ("-nopack", Arg.Set nopack, 
+       "<bool>       Do not pack memory space (default: false)");
     ] in
   let flist = ref [] in
   let () = Arg.parse speclist (fun x -> flist := x :: !flist ) usage_msg in
@@ -432,23 +473,33 @@ let () =
 
   let myds = Hashtbl.create 300 in
   let used_arrays = Hashtbl.create 10 in 
+  let unrsv_arrays = Hashtbl.create 10 in 
   let clazz_path = class_path !cp in
+  let ep = !entry_point <> "" in
   let () = List.iter (fun fn -> 
-      iter ~debug:false (fun x -> (function | JClass _ -> get_ds x myds jvm used_arrays clazz_path
+      iter ~debug:false (fun x -> (function | JClass _ -> get_ds x ~entry_point:ep myds jvm clazz_path used_arrays unrsv_arrays
                                             | JInterface _ -> ()) x
         ) fn) !flist in 
   let () = close_class_path clazz_path in
   let () = print_ds myds in
 
-  let entry_point = ref "a.class" in
   let () =
-    if !entry_point <> "" then
-      let () = iter ~debug:false (fun x -> (function | JClass _ -> get_arrays jvm.arrayheader_size !cp x jvm
+    if ep then
+      let () = iter ~debug:false (fun x -> (function | JClass _ -> get_arrays jvm.arrayheader_size !cp x jvm used_arrays unrsv_arrays
                                                      | JInterface _ -> ()) x
         ) !entry_point in 
       ()
   in
+  print_endline "resolved : ";
+  Hashtbl.iter (fun k v -> 
+      print_endline (k^" : "^(Int32.to_string v));
+    ) used_arrays ;
+  print_endline "unresolved : ";
+  Hashtbl.iter (fun k v -> 
+      print_endline (k^" : "^(string_of_int v));
+    ) unrsv_arrays ;
 
-  let () = make_json jvm myds used_arrays !nopack in
-  
+  let () = make_json jvm myds used_arrays unrsv_arrays !nopack in
+
   ()
+
