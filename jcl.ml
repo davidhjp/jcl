@@ -457,7 +457,7 @@ let () =
       let () = parse_jvm !jvm_spec jvm in
       ()
   in
-  (* Pack header regardless whether the option was given *)
+  (* Do not pack header regardless whether the option was given *)
   let () = jvm.arrayheader_size  <- get_data_sizes jvm.arrayheader_size  jvm.align_size in
   let () = 
     if !nopack then
