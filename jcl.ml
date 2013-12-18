@@ -1,6 +1,3 @@
-open Sexplib
-open Std
-open Sexp
 open Sawja_pack
 open Javalib_pack
 open Javalib
@@ -22,7 +19,6 @@ type class_data = {
   mutable _ref : int;
   mutable _arrayref : int;
 } 
-with sexp
 
 type jtype = {
   mutable refsize          : int;
@@ -42,9 +38,8 @@ type jtype = {
   mutable objheader_size   : int;
   mutable arrayheader_size : int;
   mutable align_size       : int;
-  others : (string, int) Std.Hashtbl.t
+  others : (string, int) Hashtbl.t
 }
-with sexp
 
 let rec get_value ?(type_only=false) = function
   | TBasic x ->

@@ -1,13 +1,10 @@
-TYPECONV=`ocamlfind query type_conv`
-SEXPLIB=`ocamlfind query sexplib`
 LOG = log.cmx
 LIB = $(LOG)
 
 all: buildtest $(LIB)
-	ocamlfind ocamlopt -g -annot -pp "camlp4o -I $(TYPECONV)\
-		-I $(SEXPLIB) pa_type_conv.cma pa_sexp_conv.cma" -o jcl  \
+	ocamlfind ocamlopt -g -annot -o jcl  \
 		-linkpkg -package batteries -package camlzip -package javalib \
-		-package sexplib -package sawja $(LIB) jcl.ml
+		-package sawja $(LIB) jcl.ml
 	javac mypackage/*.java
 
 $(LOG): 
