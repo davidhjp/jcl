@@ -305,22 +305,23 @@ let make_json jvm myds used_arrays unrsv_arrays nopack =
 let compute_array_size header tsize exprlist =
   let is_const = List.for_all (function | JBir.Const (`Int _) -> true | _ -> false ) exprlist in
   let tsize = Int32.of_int tsize in
+  let header = Int32.of_int header in
   let prev_val = ref Int32.zero in
   if is_const then
     let l = List.mapi (fun i x ->
         match x with
         | JBir.Const (`Int c) when i = 0 ->
           let () = prev_val := c in
-          Int32.mul c tsize
+          Int32.add (Int32.mul c tsize) header
         | JBir.Const (`Int c) ->
-          let v = Int32.mul c tsize in
+          let v = Int32.add (Int32.mul c tsize) header in
           let v = Int32.mul v !prev_val in
           let () = prev_val := c in
           v
         | _ -> failwith "Unexpected error while computing array size"                 
       ) exprlist
     in
-    Some (Int32.add (Int32.of_int header) (List.fold_left Int32.add Int32.zero l))
+    Some (List.fold_left Int32.add Int32.zero l)
   else
     None
 
@@ -369,6 +370,8 @@ let get_arrays header_size cp jclazz jvm used_arrays unresolved_arrays =
                            | Some p when p < x -> 
                              print_endline ("REPLACED "^(Int32.to_string p)^" to "^(Int32.to_string x) );
                              Hashtbl.replace used_arrays signature x
+                           | Some p when p > x -> 
+                             print_endline ("LESS "^(Int32.to_string p)^" > "^(Int32.to_string x) );
                            | _ -> ()
                          end;
                        | None ->
