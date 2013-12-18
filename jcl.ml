@@ -528,6 +528,8 @@ let () =
   with
   | _ as x -> 
     let () = Log.log ~level:Log.ERROR (Printexc.to_string x) in
+    let bt = Str.split (Str.regexp "\n") (Printexc.get_backtrace ()) in
+    let () = List.iter (fun x -> Log.log ~level:Log.ERROR x) bt in
     let () = Log.print_file ~force:true () in
     raise x
 in
