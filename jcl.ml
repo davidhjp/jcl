@@ -495,15 +495,14 @@ let () =
         iter ~debug:false (fun x -> (function | JClass _ -> get_ds x ~entry_point:ep myds jvm clazz_path used_arrays unrsv_arrays
                                               | JInterface _ -> ()) x
           ) fn) !flist in 
-    let () = close_class_path clazz_path in
 
     let () =
       if ep then
-        let entry_class = get_class (class_path !cp) (make_cn !entry_point) in
+        let entry_class = get_class clazz_path (make_cn !entry_point) in
         (function | JClass _ -> get_arrays jvm.arrayheader_size !cp entry_class jvm used_arrays unrsv_arrays
                   | JInterface _ -> ()) entry_class
     in
-
+    let () = close_class_path clazz_path in
     let () = make_json jvm myds used_arrays unrsv_arrays !nopack in
 
     let () = 
