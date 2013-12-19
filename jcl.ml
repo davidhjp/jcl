@@ -163,8 +163,8 @@ let rec get_ds ?(entry_point=false) clazz myds jvm cp used_arrays unrsv_arrays  
                  | (None,None) ->
                    (match(Hashtbl.find_option jvm.others array_string) with
                     | None ->
-                      let () = prerr_endline ("WARNING: Missing type '"^array_string^"' in the jvm file - "^
-                                              "automatically setting its size to 1") in
+                      let () = Log.log ~level:Log.WARNING ~pr:true ("Missing type '"^array_string^"' in the jvm file - "^
+                                                                    "automatically setting its size to 1") in
                       Hashtbl.add unrsv_arrays array_string 1
                     | Some x ->
                       Hashtbl.add used_arrays array_string (Int32.of_int x)
@@ -384,7 +384,8 @@ let get_arrays header_size cp jclazz jvm used_arrays unresolved_arrays =
                            | _ -> ()
                          end;
                        | None ->
-                         let () = Log.log ~level:Log.WARNING ("Could not resolve the size of '"^signature^"' - automatically setting it to 1.") in
+                         let () = Log.log ~level:Log.WARNING ~pr:true 
+                             ("Could not resolve the size of '"^signature^"' - automatically setting it to 1.") in
                          let () = Hashtbl.remove used_arrays signature in
                          Hashtbl.replace unresolved_arrays signature 1
                      end;

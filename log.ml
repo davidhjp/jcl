@@ -64,9 +64,13 @@ let get_time buf level =
   let () = add_string buf "] " in
   ()
 
-let log ?(level=INFO) msg =
+let log ?(level=INFO) ?(pr=false) msg =
   let () = get_time logmsg (get_type level) in
   let () = add_string logmsg msg in
+  let () =
+    if pr then
+      prerr_endline msg
+  in
   add_string logmsg "\n"
 
 let print () = 
