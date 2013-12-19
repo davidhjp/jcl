@@ -109,8 +109,8 @@ let rec get_all_fields cp l = function
      | Some clazz -> 
        (try
           let super_class = get_class cp clazz in
+          let () = Log.log ("Getting fields of the super class : "^(cn_name (get_name super_class))) in
           let () = f_iter (fun x -> l := x :: !l ) super_class in
-          (*           let () = print_endline ("super : "^(cn_name (get_name super_class))) in *)
           get_all_fields cp !l super_class
         with
         | No_class_found x -> raise (No_class_found ("Unable to find "^x^" in classpath check -cp option?")))
@@ -120,6 +120,7 @@ let rec get_all_fields cp l = function
 
 let rec get_ds ?(entry_point=false) clazz myds jvm cp used_arrays unrsv_arrays  =
   let clazz_string = (cn_name (get_name clazz)) in
+  let () = Log.log ("Analyzing Class : "^clazz_string) in
   let cd = Hashtbl.find_option myds clazz_string in
   match cd with
   | None -> 
@@ -334,13 +335,15 @@ let compute_array_size header tsize exprlist =
     None
 
 let get_arrays header_size cp jclazz jvm used_arrays unresolved_arrays =
-  let (ptra,cl) = JRTA.parse_program cp 
+  let (ptra,cl) = JRTA.parse_program ~instantiated:[] ~other_entrypoints:[] cp 
       (make_cms (Javalib.get_name jclazz) JProgram.main_signature) in
   let pbir = JProgram.map_program2
       (fun _ -> JBir.transform ~bcv:false ~ch_link:false ~formula:false ~formula_cmd:[] )
       (Some (fun code pp ->  (Ptmap.find pp (JBir.pc_bc2ir code)))
       ) ptra in
   let () = JProgram.iter (fun node -> 
+      let n_type = (function | JProgram.Interface _ -> "Interface" | JProgram.Class _ -> "Class" ) node in
+      let () = Log.log ("Analyzing "^n_type^": "^JBasics.cn_name (JProgram.get_name node)) in
       JProgram.cm_iter (fun cm -> 
           match cm.cm_implementation with
           | Native -> ()
@@ -498,6 +501,7 @@ let () =
 
     let () =
       if ep then
+        let () = Log.log ("===> Main class specified.. analyzing from "^(!entry_point)) in
         let entry_class = get_class clazz_path (make_cn !entry_point) in
         (function | JClass _ -> get_arrays jvm.arrayheader_size !cp entry_class jvm used_arrays unrsv_arrays
                   | JInterface _ -> ()) entry_class
@@ -520,11 +524,11 @@ let () =
     ()
   with
   | _ as x -> 
-    let () = Log.log ~level:Log.ERROR (Printexc.to_string x) in
+    let () = Log.log ~pr:true ~level:Log.ERROR (Printexc.to_string x) in
     let bt = Str.split (Str.regexp "\n") (Printexc.get_backtrace ()) in
-    let () = List.iter (fun x -> Log.log ~level:Log.ERROR x) bt in
+    let () = List.iter (fun x -> Log.log ~pr:true ~level:Log.ERROR x) bt in
     let () = Log.print_file ~force:true () in
-    raise x
+    failwith ("An error occured, generated log file : data.log")
 in
 Log.print_file ()
 
