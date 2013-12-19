@@ -413,9 +413,9 @@ let () =
         ("-cp", Arg.Set_string cp, 
          "<classpath>  Setting classpath");
         ("-main", Arg.Set_string entry_point, 
-         "<file>       Class file which contains main method.\n\
-         \                       This option is used to analyze maximum\n\
-         \                       size of array types used in the program.");
+         "<classname>       Class name which contains the main method.\n\
+         \                          This option is used to analyze maximum\n\
+         \                          size of array types used in the program.");
         ("-nopack", Arg.Set nopack, 
          "<bool>       Do not pack memory space (default: false)");
         ("-log", Arg.Bool (fun x -> Log.set_mode x), 
@@ -499,10 +499,9 @@ let () =
 
     let () =
       if ep then
-        let () = iter ~debug:false (fun x -> (function | JClass _ -> get_arrays jvm.arrayheader_size !cp x jvm used_arrays unrsv_arrays
-                                                       | JInterface _ -> ()) x
-          ) !entry_point in 
-        ()
+        let entry_class = get_class (class_path !cp) (make_cn !entry_point) in
+        (function | JClass _ -> get_arrays jvm.arrayheader_size !cp entry_class jvm used_arrays unrsv_arrays
+                  | JInterface _ -> ()) entry_class
     in
 
     let () = make_json jvm myds used_arrays unrsv_arrays !nopack in
