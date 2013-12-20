@@ -334,79 +334,71 @@ let compute_array_size header tsize exprlist =
   else
     None
 
-let get_arrays header_size cp jclazz jvm used_arrays unresolved_arrays class_done =
-  let oe = cm_fold (fun x l -> x.cm_class_method_signature::l) jclazz [] in
-  if List.length oe > 0 then
-    let (ptra,cl) = JRTA.parse_program ~instantiated:[] ~other_entrypoints:oe cp 
-        (List.hd oe) in
-    let pbir = JProgram.map_program2
-        (fun _ -> JBir.transform ~bcv:false ~ch_link:false ~formula:false ~formula_cmd:[] )
-        (Some (fun code pp ->  (Ptmap.find pp (JBir.pc_bc2ir code)))
-        ) ptra in
-    let () = JProgram.iter (fun node -> 
-        let n_type = (function | JProgram.Interface _ -> "Interface" | JProgram.Class _ -> "Class" ) node in
-        let cl_n = JBasics.cn_name (JProgram.get_name node) in
-        match Hashtbl.find_option class_done cl_n with
-        | None -> 
-          let () = Log.log ("Analyzing "^n_type^": "^cl_n) in
-          let () = Hashtbl.add class_done cl_n 0 in
-          JProgram.cm_iter (fun cm -> 
-              match cm.cm_implementation with
-              | Native -> ()
-              | Java x -> 
-                let instr = Lazy.force x in
-                let co = JBir.code instr in
-                Array.iter 
-                  (
-                    function 
-                    | (JBir.NewArray (a,b,c) ) as minstr -> 
-                      let jtype = get_value ~type_only:true b in
-                      let signature = (String.make (List.length c) '[') ^ jtype in 
-                      let () = Log.log ("Found an array : "^signature) in 
-                      let () = Log.log ("Instr : "^(JBir.print_instr minstr)) in
-                      (match Hashtbl.find_option unresolved_arrays signature with
-                       | None -> 
-                         let size = get_array_type_size jvm b in
-                         let size = compute_array_size jvm.arrayheader_size size c in
-                         begin
-                           match size with
-                           | Some x ->
-                             begin 
-                               match Hashtbl.find_option used_arrays signature with
-                               | None ->
-                                 let num = 
-                                   match(Hashtbl.find_option jvm.others signature) with
-                                   | None ->
-                                     x
-                                   | Some x ->
-                                     Int32.of_int x
-                                 in
-                                 let () = Log.log ("Size of "^(Int32.to_string num)^" added to the signature "^signature) in
-                                 Hashtbl.add used_arrays signature num
-                               | Some p when p < x -> 
-                                 let () = Log.log ("Size of "^(Int32.to_string x)^" replaced with "^
-                                                   (Int32.to_string p)^",  signature : "^signature) in
-                                 Hashtbl.replace used_arrays signature x
-                               | Some p when p >= x -> 
-                                 Log.log ("Size of "^(Int32.to_string x)^" is less than (or equal to) "^
-                                          (Int32.to_string p)^" : not replaced,  signature : "^signature)
-                               | _ -> ()
-                             end;
-                           | None ->
-                             let () = Log.log ~level:Log.WARNING ~pr:true 
-                                 ("Could not resolve the size of '"^signature^"' - automatically setting it to 1.") in
-                             let () = Hashtbl.remove used_arrays signature in
-                             Hashtbl.replace unresolved_arrays signature 1
-                         end;
-                       | _ -> 
-                         Log.log (signature^" was previously found COULD NOT BE RESOLVED")
-                      );
-                    | _ -> ()
-                  ) co
-            ) node
-        | Some _ -> Log.log ("Already analyzed : "^cl_n)
-      ) pbir in
-    ();;
+let get_arrays header_size jvm used_arrays unresolved_arrays class_done (ptra,cl) pbir =
+  let () = JProgram.iter (fun node -> 
+      let n_type = (function | JProgram.Interface _ -> "Interface" | JProgram.Class _ -> "Class" ) node in
+      let cl_n = JBasics.cn_name (JProgram.get_name node) in
+      match Hashtbl.find_option class_done cl_n with
+      | None -> 
+        let () = Log.log ("Analyzing "^n_type^": "^cl_n) in
+        let () = Hashtbl.add class_done cl_n 0 in
+        JProgram.cm_iter (fun cm -> 
+            match cm.cm_implementation with
+            | Native -> ()
+            | Java x -> 
+              let instr = Lazy.force x in
+              let co = JBir.code instr in
+              Array.iter 
+                (
+                  function 
+                  | (JBir.NewArray (a,b,c) ) as minstr -> 
+                    let jtype = get_value ~type_only:true b in
+                    let signature = (String.make (List.length c) '[') ^ jtype in 
+                    let () = Log.log ("Found an array : "^signature) in 
+                    let () = Log.log ("Instr : "^(JBir.print_instr minstr)) in
+                    (match Hashtbl.find_option unresolved_arrays signature with
+                     | None -> 
+                       let size = get_array_type_size jvm b in
+                       let size = compute_array_size jvm.arrayheader_size size c in
+                       begin
+                         match size with
+                         | Some x ->
+                           begin 
+                             match Hashtbl.find_option used_arrays signature with
+                             | None ->
+                               let num = 
+                                 match(Hashtbl.find_option jvm.others signature) with
+                                 | None ->
+                                   x
+                                 | Some x ->
+                                   Int32.of_int x
+                               in
+                               let () = Log.log ("Size of "^(Int32.to_string num)^" added to the signature "^signature) in
+                               Hashtbl.add used_arrays signature num
+                             | Some p when p < x -> 
+                               let () = Log.log ("Size of "^(Int32.to_string x)^" replaced with "^
+                                                 (Int32.to_string p)^",  signature : "^signature) in
+                               Hashtbl.replace used_arrays signature x
+                             | Some p when p >= x -> 
+                               Log.log ("Size of "^(Int32.to_string x)^" is less than (or equal to) "^
+                                        (Int32.to_string p)^" : not replaced,  signature : "^signature)
+                             | _ -> ()
+                           end;
+                         | None ->
+                           let () = Log.log ~level:Log.WARNING ~pr:true 
+                               ("Could not resolve the size of '"^signature^"' - automatically setting it to 1.") in
+                           let () = Hashtbl.remove used_arrays signature in
+                           Hashtbl.replace unresolved_arrays signature 1
+                       end;
+                     | _ -> 
+                       Log.log (signature^" was previously found COULD NOT BE RESOLVED")
+                    );
+                  | _ -> ()
+                ) co
+          ) node
+      | Some _ -> Log.log ("Already analyzed : "^cl_n)
+    ) pbir in
+  ();;
 
 let () =
   try
@@ -416,15 +408,14 @@ let () =
     let jvm_spec = ref "" in
     let cp = ref "" in
     let nopack = ref false in
-    let entry_point = ref "" in
+    let array_search = ref false in
     let speclist = Arg.align [
         ("-jvm", Arg.Set_string jvm_spec, 
          "<file>       JVM configuration file");
         ("-cp", Arg.Set_string cp, 
          "<classpath>  Setting classpath");
-        ("-acl", Arg.Set_string entry_point, 
-         "<classname>       List of class names to be analyzed for array usages,\n\
-         \                         separated by the class path separator (: or ;).");
+        ("-array", Arg.Set array_search, 
+         "                   Resolve array sizes");
         ("-nopack", Arg.Set nopack, 
          "<bool>       Do not pack memory space (default: false)");
         ("-log", Arg.Bool (fun x -> Log.set_mode x), 
@@ -499,22 +490,46 @@ let () =
     let used_arrays = Hashtbl.create 10 in 
     let unrsv_arrays = Hashtbl.create 10 in 
     let clazz_path = class_path !cp in
-    let ep = !entry_point <> "" in
     let () = List.iter (fun fn -> 
-        iter ~debug:false (fun x -> (function | JClass _ -> get_ds x ~entry_point:ep myds jvm clazz_path used_arrays unrsv_arrays
+        iter ~debug:false (fun x -> (function | JClass _ -> get_ds x ~entry_point:!array_search myds jvm clazz_path used_arrays unrsv_arrays
                                               | JInterface _ -> ()) x
           ) fn) !flist in 
 
     let () =
-      if ep then
-        let entry_point_list = Str.split (Str.regexp (JFile.sep^"+")) !entry_point in
+      if !array_search then
+        (*         let entry_point_list = Str.split (Str.regexp (JFile.sep^"+")) !entry_point in *)
         let class_done = Hashtbl.create 300 in
-        List.iter (fun entry_point ->
-            let () = Log.log ("===> acl option specified.. analyzing from "^entry_point) in
-            let entry_class = get_class clazz_path (make_cn entry_point) in
-            (function | JClass _ -> get_arrays jvm.arrayheader_size !cp entry_class jvm used_arrays unrsv_arrays class_done
-                      | JInterface _ -> ()) entry_class
-          ) entry_point_list
+        let all_classes = ref [] in
+        let all_cm_sigs = ref [] in
+        let () = List.iter (fun fn -> 
+            iter ~debug:false 
+              (fun entry_class -> 
+                 let () = all_cm_sigs := cm_fold (fun x l -> x.cm_class_method_signature::l) entry_class !all_cm_sigs in
+                 let () = all_classes := entry_class :: !all_classes in
+                 ()
+              ) fn) !flist
+        in
+        let (ptra,cl) = JRTA.parse_program ~instantiated:[] ~other_entrypoints:!all_cm_sigs !cp 
+            (List.hd !all_cm_sigs) in
+        let pbir = JProgram.map_program2
+            (fun _ -> JBir.transform ~bcv:false ~ch_link:false ~formula:false ~formula_cmd:[] )
+            (Some (fun code pp ->  (Ptmap.find pp (JBir.pc_bc2ir code)))
+            ) ptra in
+        List.iter (fun x -> 
+            let cl_n = JBasics.cn_name (get_name x) in
+            begin
+              match Hashtbl.find_option class_done cl_n with
+              | None -> 
+                (function 
+                  | JClass _ -> 
+                    let () = Log.log ("===> -array option specified.. analyzing array types from "^cl_n) in
+                    get_arrays jvm.arrayheader_size jvm used_arrays unrsv_arrays class_done (ptra,cl) pbir
+                  | JInterface _ -> ()
+                ) x
+              | Some _ ->
+                Log.log ("Already analyzed : "^cl_n)
+            end
+          ) !all_classes
     in
     let () = close_class_path clazz_path in
     let () = make_json jvm myds used_arrays unrsv_arrays !nopack in
