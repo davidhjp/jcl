@@ -356,43 +356,42 @@ let get_arrays header_size jvm used_arrays unresolved_arrays class_done (ptra,cl
                     let signature = (String.make (List.length c) '[') ^ jtype in 
                     let () = Log.log ("Found an array : "^signature) in 
                     let () = Log.log ("Instr : "^(JBir.print_instr minstr)) in
-                    (match Hashtbl.find_option unresolved_arrays signature with
-                     | None -> 
-                       let size = get_array_type_size jvm b in
-                       let size = compute_array_size jvm.arrayheader_size size c in
-                       begin
-                         match size with
-                         | Some x ->
-                           begin 
-                             match Hashtbl.find_option used_arrays signature with
-                             | None ->
-                               let num = 
-                                 match(Hashtbl.find_option jvm.others signature) with
-                                 | None ->
-                                   x
-                                 | Some x ->
-                                   Int32.of_int x
-                               in
-                               let () = Log.log ("Size of "^(Int32.to_string num)^" added to the signature "^signature) in
-                               Hashtbl.add used_arrays signature num
-                             | Some p when p < x -> 
-                               let () = Log.log ("Size of "^(Int32.to_string x)^" replaced with "^
-                                                 (Int32.to_string p)^",  signature : "^signature) in
-                               Hashtbl.replace used_arrays signature x
-                             | Some p when p >= x -> 
-                               Log.log ("Size of "^(Int32.to_string x)^" is less than (or equal to) "^
-                                        (Int32.to_string p)^" : not replaced,  signature : "^signature)
-                             | _ -> ()
-                           end;
-                         | None ->
-                           let () = Log.log ~level:Log.WARNING ~pr:true 
-                               ("Could not resolve the size of '"^signature^"' - automatically setting it to 1.") in
-                           let () = Hashtbl.remove used_arrays signature in
-                           Hashtbl.replace unresolved_arrays signature 1
-                       end;
-                     | _ -> 
-                       Log.log (signature^" was previously found COULD NOT BE RESOLVED")
-                    );
+                    (match Hashtbl.find_option jvm.others signature with
+                     | None ->
+                       (match Hashtbl.find_option unresolved_arrays signature with
+                        | None -> 
+                          let size = get_array_type_size jvm b in
+                          let size = compute_array_size jvm.arrayheader_size size c in
+                          begin
+                            match size with
+                            | Some x ->
+                              begin 
+                                match Hashtbl.find_option used_arrays signature with
+                                | None ->
+                                  let () = Log.log ("Size of "^(Int32.to_string x)^" added to the signature "^signature) in
+                                  Hashtbl.add used_arrays signature x
+                                | Some p when p < x -> 
+                                  let () = Log.log ("Size of "^(Int32.to_string x)^" replaced with "^
+                                                    (Int32.to_string p)^",  signature : "^signature) in
+                                  Hashtbl.replace used_arrays signature x
+                                | Some p when p >= x -> 
+                                  Log.log ("Size of "^(Int32.to_string x)^" is less than (or equal to) "^
+                                           (Int32.to_string p)^" : not replaced,  signature : "^signature)
+                                | _ -> ()
+                              end;
+                            | None ->
+                              let () = Log.log ~level:Log.WARNING ~pr:true 
+                                  ("Could not resolve the size of '"^signature^"' - automatically setting it to 1.") in
+                              let () = Hashtbl.remove used_arrays signature in
+                              Hashtbl.replace unresolved_arrays signature 1
+                          end;
+                        | _ -> 
+                          Log.log (signature^" was previously found COULD NOT BE RESOLVED")
+                       );
+                     | Some x ->
+                       let () = Log.log ("Found the size of "^signature^" in the jvm file : "^(string_of_int x)) in
+                       Hashtbl.replace used_arrays signature (Int32.of_int x)
+                    )
                   | _ -> ()
                 ) co
           ) node
