@@ -428,7 +428,7 @@ let () =
         ("-nopack", Arg.Set nopack, 
          "<bool>       Do not pack memory space (default: false)");
         ("-log", Arg.Bool (fun x -> Log.set_mode x), 
-         "<true|false> Output a log file (default: false)");
+         "<bool>       Output a log file (default: false)");
       ] in
     let flist = ref [] in
     let () = Arg.parse speclist (fun x -> flist := x :: !flist ) usage_msg in
