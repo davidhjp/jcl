@@ -416,9 +416,9 @@ let () =
         ("-array", Arg.Set array_search, 
          "                   Resolve array sizes");
         ("-nopack", Arg.Set nopack, 
-         "<bool>       Do not pack memory space (default: false)");
-        ("-log", Arg.Bool (fun x -> Log.set_mode x), 
-         "<bool>       Output a log file (default: false)");
+         "             Do not pack memory space");
+        ("-log", Arg.Unit (fun x -> Log.open_chan ()  ), 
+         "             Output a log file");
       ] in
     let flist = ref [] in
     let () = Arg.parse speclist (fun x -> flist := x :: !flist ) usage_msg in
@@ -548,12 +548,13 @@ let () =
     ()
   with
   | _ as x -> 
+    let () = Log.open_chan () in
     let () = Log.log ~pr:true ~level:Log.ERROR (Printexc.to_string x) in
     let bt = Str.split (Str.regexp "\n") (Printexc.get_backtrace ()) in
     let () = List.iter (fun x -> Log.log ~pr:true ~level:Log.ERROR x) bt in
-    let () = Log.print_file ~force:true () in
+    let () = Log.close_chan () in
     failwith ("An error occured, generated log file : data.log")
 in
-Log.print_file ()
+Log.close_chan ()
 
 

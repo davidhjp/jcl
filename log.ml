@@ -8,10 +8,6 @@ type level =
   | DEBUG
 
 let logmsg = create 1000
-let mode = ref false
-
-let set_mode = function
-  | _ as x -> mode := x
 
 let get_type = function
   | WARNING -> "WARNING"
@@ -45,6 +41,10 @@ let get_mon = function
   | 11 -> "Nov"
   | _ -> ""
 
+type ochannel = out_channel option
+
+let ochan = ref None 
+
 let get_time buf level = 
   let time = Unix.localtime (Unix.time ()) in
   let () = add_string buf "[" in
@@ -64,23 +64,44 @@ let get_time buf level =
   let () = add_string buf "] " in
   ()
 
+let open_chan () =
+  if !ochan = None then
+    ochan := Some (open_out "data.log")
+
+
+let flush_log () =
+  match !ochan with
+  | Some x -> 
+    let () = Printf.fprintf x "%s" (contents logmsg) in
+    let () = clear logmsg in
+    flush x
+  | None -> ()
+
+let close_chan () =
+  match !ochan with
+  | Some x -> 
+      let () = flush_log () in
+      let () = close_out x in 
+      ochan := None
+  | None -> ()
+
 let log ?(level=INFO) ?(pr=false) msg =
-  let () = get_time logmsg (get_type level) in
-  let () = add_string logmsg msg in
   let () =
     if pr then
       prerr_endline msg
   in
-  add_string logmsg "\n"
+  match !ochan with
+  | Some _ ->
+    let () =
+      if length logmsg > 5000 then
+        flush_log ()
+    in
+    let () = get_time logmsg (get_type level) in
+    let () = add_string logmsg msg in
+    add_string logmsg "\n"
+  | None -> ()
 
 let print () = 
   print_endline (contents logmsg)
 
-let print_file ?(force=false) () =
-  if !mode || force then
-    let ofile = "data.log" in
-    let oc = open_out ofile in
-    let () = Printf.fprintf oc "%s" (contents logmsg) in
-    let () = flush stdout in
-    close_out oc
 

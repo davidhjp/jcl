@@ -8,7 +8,7 @@ all: buildtest $(LIB)
 	javac mypackage/*.java
 
 $(LOG): 
-	ocamlfind ocamlopt -c -package batteries log.ml
+	ocamlfind ocamlopt -c -annot -package batteries log.ml
 
 clean:
 	@rm -f mypackage/*.class mypackage/*.jar JavaInstrument/*.class \
