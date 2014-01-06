@@ -1,0 +1,12 @@
+Byte_Size : 1
+Short_Size : 1
+Int_Size : 1
+Long_Size : 2
+Float_Size : 1
+Double_Size : 2
+Boolean_Size : 1
+Char_Size : 1
+Ref_Size : 1
+ObjHeader_Size : 6
+ArrayHeader_Size : 6
+Align_Size : 1

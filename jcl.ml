@@ -311,19 +311,21 @@ let make_json jvm myds used_arrays unrsv_arrays nopack =
   let () = flush stdout in
   close_out oc
 
-let compute_array_size header tsize exprlist =
+let compute_array_size header ref_size tsize exprlist =
   let is_const = List.for_all (function | JBir.Const (`Int _) -> true | _ -> false ) exprlist in
   let tsize = Int32.of_int tsize in
+  let ref_size = Int32.of_int ref_size in
   let header = Int32.of_int header in
   let prev_val = ref Int32.zero in
   if is_const then
+    let m_length = List.length exprlist in
     let l = List.mapi (fun i x ->
         match x with
         | JBir.Const (`Int c) when i = 0 ->
           let () = prev_val := c in
-          Int32.add (Int32.mul c tsize) header
+          Int32.add (if i = (m_length - 1) then (Int32.mul c tsize) else (Int32.mul c ref_size)) header
         | JBir.Const (`Int c) ->
-          let v = Int32.add (Int32.mul c tsize) header in
+          let v = Int32.add (if i = (m_length - 1) then (Int32.mul c tsize) else (Int32.mul c ref_size)) header in
           let v = Int32.mul v !prev_val in
           let () = prev_val := c in
           v
@@ -360,8 +362,8 @@ let get_arrays header_size jvm used_arrays unresolved_arrays class_done (ptra,cl
                      | None ->
                        (match Hashtbl.find_option unresolved_arrays signature with
                         | None -> 
-                          let size = get_array_type_size jvm b in
-                          let size = compute_array_size jvm.arrayheader_size size c in
+                          let tsize = get_array_type_size jvm b in
+                          let size = compute_array_size jvm.arrayheader_size jvm.ref_size tsize c in
                           begin
                             match size with
                             | Some x ->
@@ -467,8 +469,7 @@ let () =
         let () = parse_jvm !jvm_spec jvm in
         ()
     in
-    (* Do not pack header regardless whether the option was given *)
-    let () = jvm.arrayheader_size  <- get_data_sizes jvm.arrayheader_size  jvm.align_size in
+
     let () = 
       if !nopack then
         begin
@@ -482,6 +483,7 @@ let () =
           jvm.char_size         <- get_data_sizes jvm.char_size         jvm.align_size;
           jvm.ref_size          <- get_data_sizes jvm.ref_size          jvm.align_size;
           jvm.objheader_size    <- get_data_sizes jvm.objheader_size    jvm.align_size;
+          jvm.arrayheader_size  <- get_data_sizes jvm.arrayheader_size  jvm.align_size;
         end
     in
 
